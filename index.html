@@ -31,21 +31,28 @@ h1{font-size:26px;margin:0;flex:1}
 .task{background:var(--card);border-radius:999px;padding:12px 18px;box-shadow:0 4px 12px #ffadc440;font-size:16px}
 .task small{color:var(--muted);font-size:11px;margin-left:6px}
 .task.off{opacity:.45}
+.special{justify-content:center}
+.special .task{animation:appear .45s ease backwards}
+.special .task:nth-child(2){animation-delay:.15s}
+.special .task:nth-child(3){animation-delay:.3s}
+@keyframes appear{from{transform:scale(.6);opacity:0}}
 .task.pop{animation:pop .6s ease forwards;pointer-events:none}
 @keyframes pop{0%{background:var(--pink);color:#fff}35%{background:var(--pink);color:#fff;transform:scale(1.12)}100%{background:var(--pink);color:#fff;transform:scale(0);opacity:0}}
 .task.add{box-shadow:none}
 .empty{text-align:center;color:var(--muted);padding:40px 0;font-size:17px;width:100%}
+.welcome{display:flex;flex-direction:column;justify-content:center;gap:24px;min-height:80vh}
+.msg{font-size:21px;line-height:1.5;text-align:center;margin:0}
+.go{align-self:center;background:var(--pink);color:#fff;border-radius:999px;padding:12px 24px;font-size:17px}
+.call{display:block;background:var(--pink);color:#fff;text-decoration:none;text-align:center;font-size:24px;font-weight:700;padding:26px;border-radius:26px;box-shadow:0 6px 18px #ffadc480;margin-bottom:24px}
+.sec{font-size:17px;margin:0 0 10px}
+.grid.big{margin-top:24px;grid-template-columns:1fr 1fr}
+.big .cat{min-height:170px}
 .done-h{margin:28px 0 10px;font-size:15px;color:var(--muted);font-weight:600}
 .edit-cat{margin-top:24px;width:100%;text-align:center;color:var(--muted);padding:12px}
 dialog{border:0;border-radius:24px;padding:20px;width:min(92vw,360px);color:var(--text);background:var(--card)}
 dialog::backdrop{background:#5a3a4840}
 dialog h2{margin:0 0 14px;font-size:19px}
 dialog input[type=text]{width:100%;font-size:17px;padding:12px;border:2px solid var(--soft);border-radius:14px;margin-bottom:12px;outline:none;color:inherit}
-.types{display:flex;gap:8px;margin-bottom:12px}
-.types label{flex:1}
-.types input{position:absolute;opacity:0}
-.types span{display:block;text-align:center;padding:10px;border-radius:14px;background:var(--bg)}
-.types input:checked+span{background:var(--pink);color:#fff}
 .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:6px}
 .actions .del{margin-right:auto;color:#d9536f}
 .actions .ok{background:var(--pink);color:#fff;border-radius:999px;padding:8px 18px}
@@ -59,10 +66,6 @@ dialog input[type=text]{width:100%;font-size:17px;padding:12px;border:2px solid 
     <h2 id="dTitle"></h2>
     <input type="text" id="dEmoji" placeholder="Emoji (ör. 🌸)" maxlength="8">
     <input type="text" id="dName" placeholder="Ad" required>
-    <div class="types" id="dTypes">
-      <label><input type="radio" name="type" value="d"><span>Günlük</span></label>
-      <label><input type="radio" name="type" value="w"><span>Haftalık</span></label>
-    </div>
     <div class="actions">
       <button value="del" class="del" id="dDel" formnovalidate>Sil</button>
       <button value="cancel" formnovalidate>İptal</button>
@@ -72,23 +75,35 @@ dialog input[type=text]{width:100%;font-size:17px;padding:12px;border:2px solid 
 </dialog>
 
 <script>
-const KEY = 'sinem-rutin';
+const KEY = 'sinem-rutin-v2';
+const PHONE = '+905382937152';
+const NTFY = 'https://ntfy.sh/sinem-451965c8de30825e4a6b';
+const MOODS = ['Özledim 🥺', 'Canım sıkıldı 😔', 'Acıktım 🍕', 'Mutluyum 😊'];
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 const t = (name, type) => ({ id: uid(), name, type, done: null });
-const SEED = [
-  { id: uid(), name: 'Temizlik', emoji: '🧹', tasks: [t('Yatağı topla', 'd'), t('Giyinme odasını düzenle', 'w'), t('Çamaşırları yıka', 'w')] },
-  { id: uid(), name: 'Köpekler', emoji: '🐶', tasks: [t("Bubble'a mama ver", 'd'), t("Dobby'ye mama ver", 'd'), t("Küçümen'e mama ver", 'd'), t("Bubble'ı tara", 'w'), t("Dobby'yi tara", 'w')] },
-  { id: uid(), name: 'Kişisel Bakım', emoji: '🧴', tasks: [t('Cilt bakımı yap', 'd'), t('Vitaminleri al', 'd'), t('Saç maskesi yap', 'w')] },
-  { id: uid(), name: 'Mutfak', emoji: '🍳', tasks: [t('Bulaşıkları yerleştir', 'd'), t('Buzdolabını kontrol et', 'w'), t('Market listesi hazırla', 'w')] },
-];
+const c = (name, emoji, type, tasks) => ({ id: uid(), name, emoji, type, tasks: tasks.map(n => t(n, type)) });
+const SEED = {
+  special: ['Yatağını topla', 'Kahvaltını yap', "Anıl'a çok sevdiğini söylediğin videolar ve fotoğraflar gönder"].map(n => t(n, 'd')),
+  cats: [
+    c('Temizlik', '🧹', 'd', ['Bulaşıkları yerleştir']),
+    c('Kişisel Bakım', '🧴', 'd', ['Cilt bakımı yap', 'Vitaminleri al']),
+    c('Köpek', '🐶', 'd', ["Bubble'a mama ver"]),
+    c('Kahvaltı', '🥐', 'd', ['Kahvaltı hazırla', 'Kahvaltı sonrası masayı topla']),
+    c('Temizlik', '🧹', 'w', ['Giyinme odasını düzenle', 'Çamaşırları yıka']),
+    c('Kişisel Bakım', '🧴', 'w', ['Saç maskesi yap']),
+    c('Mutfak', '🍳', 'w', ['Buzdolabını kontrol et', 'Market listesi hazırla']),
+    c('Köpek', '🐶', 'w', ["Bubble'ı tara"]),
+  ],
+};
 
-let cats;
-try { cats = JSON.parse(localStorage.getItem(KEY)) || SEED; } catch { cats = SEED; }
-let view = null;   // açık kategori id'si, null = ana ekran
+let data;
+try { data = JSON.parse(localStorage.getItem(KEY)) || SEED; } catch { data = SEED; }
+let view = null;   // null = ana ekran, 'd'/'w' = bölüm, diğer = kategori id'si
 let editing = false;
+let welcome = true;
 
 function save() {
-  try { localStorage.setItem(KEY, JSON.stringify(cats)); }
+  try { localStorage.setItem(KEY, JSON.stringify(data)); }
   catch { alert('Kaydedilemedi! Tarayıcı depolaması kapalı olabilir.'); }
 }
 
@@ -99,26 +114,47 @@ function periodKey(type, d = new Date()) {
   return ymd(d);
 }
 const isDone = task => task.done === periodKey(task.type);
-const left = cat => cat.tasks.filter(x => !isDone(x)).length;
+const left = cs => cs.reduce((n, cat) => n + cat.tasks.filter(x => !isDone(x)).length, 0);
+const leftLabel = n => n ? n + ' görev kaldı' : 'Hepsi tamam 💖';
+const catBtn = (id, emoji, name, n) => `<button class="cat" data-view="${id}"><span class="emo">${esc(emoji)}</span><span class="name">${esc(name)}</span><span class="count">${leftLabel(n)}</span></button>`;
 const esc = s => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const $ = id => document.getElementById(id);
 
 function render() {
   const app = $('app');
-  const cat = cats.find(c => c.id === view);
-  if (!cat) {
-    view = null; editing = false;
+  if (welcome) {
+    const todo = data.special.filter(x => !isDone(x));
+    app.innerHTML = `<div class="welcome">
+      <p class="msg">Canım aşkım, bugün yapılacak işlerin bunlar ama enerjin ve güzelliğin hepsinin üzerinden gelecektir. Seni çok seviyorum ❤️</p>
+      <div class="tasks special">${todo.map(x => `<button class="task" data-task="${x.id}">${esc(x.name)}</button>`).join('') || '<div class="empty">Bugünün özel görevleri tamam 💖</div>'}</div>
+      <button class="go" id="closeWelcome">Ana sayfaya geç ›</button>
+    </div>`;
+    return;
+  }
+  if (view === null) {
     app.innerHTML = `<header><h1>Merhaba Sinem 🌸</h1></header>
+      <a class="call" href="tel:${PHONE}">Anıl'ı Ara 📞</a>
+      <h2 class="sec">Duygu Modları</h2>
+      <div class="tasks">${MOODS.map(m => `<button class="task" data-mood="${m}">${m}</button>`).join('')}</div>
+      <div class="grid big">
+        ${catBtn('d', '☀️', 'Günlük Görevler', left(data.cats.filter(c => c.type === 'd')))}
+        ${catBtn('w', '📅', 'Haftalık Görevler', left(data.cats.filter(c => c.type === 'w')))}
+      </div>`;
+    return;
+  }
+  if (view === 'd' || view === 'w') {
+    app.innerHTML = `<header>
+        <button class="pill" id="back" aria-label="Geri">‹</button>
+        <h1>${view === 'd' ? 'Günlük' : 'Haftalık'} Görevler</h1>
+      </header>
       <div class="grid">
-        ${cats.map(c => `<button class="cat" data-cat="${c.id}">
-          <span class="emo">${esc(c.emoji || '🌸')}</span>
-          <span class="name">${esc(c.name)}</span>
-          <span class="count">${left(c) ? left(c) + ' görev kaldı' : 'Hepsi tamam 💖'}</span>
-        </button>`).join('')}
+        ${data.cats.filter(c => c.type === view).map(c => catBtn(c.id, c.emoji || '🌸', c.name, left([c]))).join('')}
         <button class="cat add" id="addCat">+ Kategori</button>
       </div>`;
     return;
   }
+  const cat = data.cats.find(c => c.id === view);
+  if (!cat) { view = null; editing = false; return render(); }
   const shown = editing ? cat.tasks : cat.tasks.filter(x => !isDone(x));
   app.innerHTML = `<header>
       <button class="pill" id="back" aria-label="Geri">‹</button>
@@ -127,7 +163,7 @@ function render() {
     </header>
     <div class="tasks">
       ${shown.map(x => `<button class="task${editing && isDone(x) ? ' off' : ''}" data-task="${x.id}">
-        ${editing ? '✏️ ' : ''}${esc(x.name)}<small>${x.type === 'w' ? 'haftalık' : 'günlük'}</small></button>`).join('')}
+        ${editing ? '✏️ ' : ''}${esc(x.name)}</button>`).join('')}
       ${!shown.length ? '<div class="empty">Bugünlük hepsi tamam 💖</div>' : ''}
       <button class="task add" id="addTask">+ Görev</button>
     </div>
@@ -136,17 +172,15 @@ function render() {
     ${editing ? '<button class="edit-cat" id="editCat">Kategoriyi düzenle / sil</button>' : ''}`;
 }
 
-function ask({ title, name = '', emoji, type, canDelete }, done) {
+function ask({ title, name = '', emoji, canDelete }, done) {
   const dlg = $('dlg');
   $('dTitle').textContent = title;
   $('dName').value = name;
   $('dEmoji').hidden = emoji === undefined;
   $('dEmoji').value = emoji || '';
-  $('dTypes').hidden = type === undefined;
-  dlg.querySelectorAll('[name=type]').forEach(r => r.checked = r.value === (type || 'd'));
   $('dDel').hidden = !canDelete;
   dlg.onclose = () => {
-    const vals = { name: $('dName').value.trim(), emoji: $('dEmoji').value.trim(), type: dlg.querySelector('[name=type]:checked').value };
+    const vals = { name: $('dName').value.trim(), emoji: $('dEmoji').value.trim() };
     if (dlg.returnValue === 'ok' && vals.name) done('ok', vals);
     if (dlg.returnValue === 'del') done('del');
     dlg.returnValue = '';
@@ -157,31 +191,40 @@ function ask({ title, name = '', emoji, type, canDelete }, done) {
 document.addEventListener('click', e => {
   const el = e.target.closest('button');
   if (!el || el.closest('dialog')) return;
-  const cat = cats.find(c => c.id === view);
+  const cat = data.cats.find(c => c.id === view);
+  const list = welcome ? data.special : cat?.tasks;
 
-  if (el.dataset.cat) { view = el.dataset.cat; render(); }
-  else if (el.id === 'back') { view = null; render(); }
+  if (el.dataset.view) { view = el.dataset.view; render(); }
+  else if (el.id === 'back') { view = cat ? cat.type : null; editing = false; render(); }
+  else if (el.id === 'closeWelcome') { welcome = false; render(); }
+  else if (el.dataset.mood) {
+    el.disabled = true;
+    fetch(NTFY, { method: 'POST', body: 'Sinem: ' + el.dataset.mood })
+      .then(r => { if (!r.ok) throw r; el.textContent = 'Gönderildi 💌'; })
+      .catch(() => alert('Gönderilemedi, internet bağlantını kontrol et.'))
+      .finally(() => setTimeout(render, 1500));
+  }
   else if (el.id === 'toggle') { editing = !editing; render(); }
   else if (el.id === 'addCat') {
-    ask({ title: 'Yeni kategori', emoji: '' }, (_, v) => { cats.push({ id: uid(), name: v.name, emoji: v.emoji, tasks: [] }); save(); render(); });
+    ask({ title: 'Yeni kategori', emoji: '' }, (_, v) => { data.cats.push({ id: uid(), name: v.name, emoji: v.emoji, type: view, tasks: [] }); save(); render(); });
   }
   else if (el.id === 'editCat') {
     ask({ title: 'Kategoriyi düzenle', name: cat.name, emoji: cat.emoji, canDelete: true }, (a, v) => {
-      if (a === 'del') { if (!confirm(`"${cat.name}" ve içindeki tüm görevler silinsin mi?`)) return; cats = cats.filter(c => c !== cat); }
+      if (a === 'del') { if (!confirm(`"${cat.name}" ve içindeki tüm görevler silinsin mi?`)) return; data.cats = data.cats.filter(c => c !== cat); view = cat.type; }
       else { cat.name = v.name; cat.emoji = v.emoji; }
       save(); render();
     });
   }
   else if (el.id === 'addTask') {
-    ask({ title: 'Yeni görev', type: 'd' }, (_, v) => { cat.tasks.push(t(v.name, v.type)); save(); render(); });
+    ask({ title: 'Yeni görev' }, (_, v) => { cat.tasks.push(t(v.name, cat.type)); save(); render(); });
   }
   else if (el.dataset.undo) { cat.tasks.find(x => x.id === el.dataset.undo).done = null; save(); render(); }
   else if (el.dataset.task) {
-    const task = cat.tasks.find(x => x.id === el.dataset.task);
+    const task = list.find(x => x.id === el.dataset.task);
     if (editing) {
-      ask({ title: 'Görevi düzenle', name: task.name, type: task.type, canDelete: true }, (a, v) => {
+      ask({ title: 'Görevi düzenle', name: task.name, canDelete: true }, (a, v) => {
         if (a === 'del') cat.tasks = cat.tasks.filter(x => x !== task);
-        else { if (task.type !== v.type) task.done = null; task.name = v.name; task.type = v.type; }
+        else task.name = v.name;
         save(); render();
       });
     } else {
@@ -193,8 +236,15 @@ document.addEventListener('click', e => {
   }
 });
 
-// Uygulama ertesi gün tekrar açıldığında listeyi tazele.
-document.addEventListener('visibilitychange', () => { if (!document.hidden && !$('dlg').open) render(); });
+// Uygulama tekrar açıldığında karşılamayı göster ve listeyi tazele.
+let hiddenAt = 0;
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { hiddenAt = Date.now(); return; }
+  if ($('dlg').open) return;
+  // shortcut: 5 dk'dan kısa arka plan (ör. arama, ntfy) "yeniden açılış" sayılmaz; gerekirse süreyi değiştir.
+  if (Date.now() - hiddenAt > 5 * 60e3) { welcome = true; view = null; editing = false; }
+  render();
+});
 
 render();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
