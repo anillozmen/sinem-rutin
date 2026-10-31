@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Rutin">
+<meta name="theme-color" content="#fff5f8">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon.png">
+<title>Sinem'in Rutini</title>
+<style>
+:root{--bg:#fff5f8;--card:#fff;--pink:#ff8fb1;--soft:#ffd6e3;--text:#5a3a48;--muted:#b38c9b}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;font-family:-apple-system,system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;
+  padding:calc(env(safe-area-inset-top) + 16px) 16px calc(env(safe-area-inset-bottom) + 24px);-webkit-user-select:none;user-select:none}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
+header{display:flex;align-items:center;gap:8px;margin:4px 0 20px}
+h1{font-size:26px;margin:0;flex:1}
+.pill{background:var(--soft);border-radius:999px;padding:8px 14px;font-size:15px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px}
+.cat{background:var(--card);border-radius:26px;padding:18px 16px;text-align:left;box-shadow:0 6px 18px #ffadc440;display:flex;flex-direction:column;gap:4px;min-height:132px}
+.cat:active{transform:scale(.97)}
+.cat .emo{font-size:38px;margin-bottom:4px}
+.cat .name{font-weight:600;font-size:17px}
+.cat .count{color:var(--muted);font-size:14px}
+.add{border:2px dashed var(--soft);background:transparent;box-shadow:none;color:var(--muted)}
+.cat.add{align-items:center;justify-content:center;font-size:16px}
+.tasks{display:flex;flex-wrap:wrap;gap:10px}
+.task{background:var(--card);border-radius:999px;padding:12px 18px;box-shadow:0 4px 12px #ffadc440;font-size:16px}
+.task small{color:var(--muted);font-size:11px;margin-left:6px}
+.task.off{opacity:.45}
+.task.pop{animation:pop .6s ease forwards;pointer-events:none}
+@keyframes pop{0%{background:var(--pink);color:#fff}35%{background:var(--pink);color:#fff;transform:scale(1.12)}100%{background:var(--pink);color:#fff;transform:scale(0);opacity:0}}
+.task.add{box-shadow:none}
+.empty{text-align:center;color:var(--muted);padding:40px 0;font-size:17px;width:100%}
+.edit-cat{margin-top:24px;width:100%;text-align:center;color:var(--muted);padding:12px}
+dialog{border:0;border-radius:24px;padding:20px;width:min(92vw,360px);color:var(--text);background:var(--card)}
+dialog::backdrop{background:#5a3a4840}
+dialog h2{margin:0 0 14px;font-size:19px}
+dialog input[type=text]{width:100%;font-size:17px;padding:12px;border:2px solid var(--soft);border-radius:14px;margin-bottom:12px;outline:none;color:inherit}
+.types{display:flex;gap:8px;margin-bottom:12px}
+.types label{flex:1}
+.types input{position:absolute;opacity:0}
+.types span{display:block;text-align:center;padding:10px;border-radius:14px;background:var(--bg)}
+.types input:checked+span{background:var(--pink);color:#fff}
+.actions{display:flex;gap:8px;justify-content:flex-end;margin-top:6px}
+.actions .del{margin-right:auto;color:#d9536f}
+.actions .ok{background:var(--pink);color:#fff;border-radius:999px;padding:8px 18px}
+</style>
+</head>
+<body>
+<main id="app"></main>
+
+<dialog id="dlg">
+  <form method="dialog">
+    <h2 id="dTitle"></h2>
+    <input type="text" id="dEmoji" placeholder="Emoji (ör. 🌸)" maxlength="8">
+    <input type="text" id="dName" placeholder="Ad" required>
+    <div class="types" id="dTypes">
+      <label><input type="radio" name="type" value="d"><span>Günlük</span></label>
+      <label><input type="radio" name="type" value="w"><span>Haftalık</span></label>
+    </div>
+    <div class="actions">
+      <button value="del" class="del" id="dDel" formnovalidate>Sil</button>
+      <button value="cancel" formnovalidate>İptal</button>
+      <button value="ok" class="ok">Kaydet</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+const KEY = 'sinem-rutin';
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const t = (name, type) => ({ id: uid(), name, type, done: null });
+const SEED = [
+  { id: uid(), name: 'Temizlik', emoji: '🧹', tasks: [t('Yatağı topla', 'd'), t('Giyinme odasını düzenle', 'w'), t('Çamaşırları yıka', 'w')] },
+  { id: uid(), name: 'Köpekler', emoji: '🐶', tasks: [t("Bubble'a mama ver", 'd'), t("Dobby'ye mama ver", 'd'), t("Küçümen'e mama ver", 'd'), t("Bubble'ı tara", 'w'), t("Dobby'yi tara", 'w')] },
+  { id: uid(), name: 'Kişisel Bakım', emoji: '🧴', tasks: [t('Cilt bakımı yap', 'd'), t('Vitaminleri al', 'd'), t('Saç maskesi yap', 'w')] },
+  { id: uid(), name: 'Mutfak', emoji: '🍳', tasks: [t('Bulaşıkları yerleştir', 'd'), t('Buzdolabını kontrol et', 'w'), t('Market listesi hazırla', 'w')] },
+];
+
+let cats;
+try { cats = JSON.parse(localStorage.getItem(KEY)) || SEED; } catch { cats = SEED; }
+let view = null;   // açık kategori id'si, null = ana ekran
+let editing = false;
+
+function save() {
+  try { localStorage.setItem(KEY, JSON.stringify(cats)); }
+  catch { alert('Kaydedilemedi! Tarayıcı depolaması kapalı olabilir.'); }
+}
+
+const ymd = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+// Görev, yapıldığı dönemin anahtarını tutar; dönem değişince kendiliğinden tekrar görünür.
+function periodKey(type, d = new Date()) {
+  if (type === 'w') d = new Date(d.getFullYear(), d.getMonth(), d.getDate() - (d.getDay() + 6) % 7); // o haftanın pazartesisi
+  return ymd(d);
+}
+const isDone = task => task.done === periodKey(task.type);
+const left = cat => cat.tasks.filter(x => !isDone(x)).length;
+const esc = s => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const $ = id => document.getElementById(id);
+
+function render() {
+  const app = $('app');
+  const cat = cats.find(c => c.id === view);
+  if (!cat) {
+    view = null; editing = false;
+    app.innerHTML = `<header><h1>Merhaba Sinem 🌸</h1></header>
+      <div class="grid">
+        ${cats.map(c => `<button class="cat" data-cat="${c.id}">
+          <span class="emo">${esc(c.emoji || '🌸')}</span>
+          <span class="name">${esc(c.name)}</span>
+          <span class="count">${left(c) ? left(c) + ' görev kaldı' : 'Hepsi tamam 💖'}</span>
+        </button>`).join('')}
+        <button class="cat add" id="addCat">+ Kategori</button>
+      </div>`;
+    return;
+  }
+  const shown = editing ? cat.tasks : cat.tasks.filter(x => !isDone(x));
+  app.innerHTML = `<header>
+      <button class="pill" id="back" aria-label="Geri">‹</button>
+      <h1>${esc(cat.emoji || '')} ${esc(cat.name)}</h1>
+      <button class="pill" id="toggle">${editing ? 'Bitti' : 'Düzenle'}</button>
+    </header>
+    <div class="tasks">
+      ${shown.map(x => `<button class="task${editing && isDone(x) ? ' off' : ''}" data-task="${x.id}">
+        ${editing ? '✏️ ' : ''}${esc(x.name)}<small>${x.type === 'w' ? 'haftalık' : 'günlük'}</small></button>`).join('')}
+      ${!shown.length ? '<div class="empty">Bugünlük hepsi tamam 💖</div>' : ''}
+      <button class="task add" id="addTask">+ Görev</button>
+    </div>
+    ${editing ? '<button class="edit-cat" id="editCat">Kategoriyi düzenle / sil</button>' : ''}`;
+}
+
+function ask({ title, name = '', emoji, type, canDelete }, done) {
+  const dlg = $('dlg');
+  $('dTitle').textContent = title;
+  $('dName').value = name;
+  $('dEmoji').hidden = emoji === undefined;
+  $('dEmoji').value = emoji || '';
+  $('dTypes').hidden = type === undefined;
+  dlg.querySelectorAll('[name=type]').forEach(r => r.checked = r.value === (type || 'd'));
+  $('dDel').hidden = !canDelete;
+  dlg.onclose = () => {
+    const vals = { name: $('dName').value.trim(), emoji: $('dEmoji').value.trim(), type: dlg.querySelector('[name=type]:checked').value };
+    if (dlg.returnValue === 'ok' && vals.name) done('ok', vals);
+    if (dlg.returnValue === 'del') done('del');
+    dlg.returnValue = '';
+  };
+  dlg.showModal();
+}
+
+document.addEventListener('click', e => {
+  const el = e.target.closest('button');
+  if (!el || el.closest('dialog')) return;
+  const cat = cats.find(c => c.id === view);
+
+  if (el.dataset.cat) { view = el.dataset.cat; render(); }
+  else if (el.id === 'back') { view = null; render(); }
+  else if (el.id === 'toggle') { editing = !editing; render(); }
+  else if (el.id === 'addCat') {
+    ask({ title: 'Yeni kategori', emoji: '' }, (_, v) => { cats.push({ id: uid(), name: v.name, emoji: v.emoji, tasks: [] }); save(); render(); });
+  }
+  else if (el.id === 'editCat') {
+    ask({ title: 'Kategoriyi düzenle', name: cat.name, emoji: cat.emoji, canDelete: true }, (a, v) => {
+      if (a === 'del') { if (!confirm(`"${cat.name}" ve içindeki tüm görevler silinsin mi?`)) return; cats = cats.filter(c => c !== cat); }
+      else { cat.name = v.name; cat.emoji = v.emoji; }
+      save(); render();
+    });
+  }
+  else if (el.id === 'addTask') {
+    ask({ title: 'Yeni görev', type: 'd' }, (_, v) => { cat.tasks.push(t(v.name, v.type)); save(); render(); });
+  }
+  else if (el.dataset.task) {
+    const task = cat.tasks.find(x => x.id === el.dataset.task);
+    if (editing) {
+      ask({ title: 'Görevi düzenle', name: task.name, type: task.type, canDelete: true }, (a, v) => {
+        if (a === 'del') cat.tasks = cat.tasks.filter(x => x !== task);
+        else { if (task.type !== v.type) task.done = null; task.name = v.name; task.type = v.type; }
+        save(); render();
+      });
+    } else {
+      task.done = periodKey(task.type);
+      save();
+      el.classList.add('pop');
+      el.addEventListener('animationend', render, { once: true });
+    }
+  }
+});
+
+// Uygulama ertesi gün tekrar açıldığında listeyi tazele.
+document.addEventListener('visibilitychange', () => { if (!document.hidden && !$('dlg').open) render(); });
+
+render();
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+</script>
+</body>
+</html>

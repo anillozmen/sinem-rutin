@@ -1,0 +1,11 @@
+{
+  "name": "Sinem'in Rutini",
+  "short_name": "Rutin",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#fff5f8",
+  "theme_color": "#fff5f8",
+  "lang": "tr",
+  "icons": [{ "src": "icon.png", "sizes": "512x512", "type": "image/png" }]
+}
