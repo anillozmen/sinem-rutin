@@ -6,29 +6,30 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Rutin">
-<meta name="theme-color" content="#fff5f8">
+<meta name="theme-color" content="#f6efe4">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon.png">
 <title>Sinem'in Rutini</title>
 <style>
-:root{--bg:#fff5f8;--card:#fff;--pink:#ff8fb1;--soft:#ffd6e3;--text:#5a3a48;--muted:#b38c9b}
+:root{--bg:#f6efe4;--card:#fffdf8;--pink:#ff8fb1;--soft:#e9dfd0;--text:#3a2e28;--muted:#9a8b7d;--shadow:0 8px 24px #3a2e2814}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 body{margin:0;font-family:-apple-system,system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;
   padding:calc(env(safe-area-inset-top) + 16px) 16px calc(env(safe-area-inset-bottom) + 24px);-webkit-user-select:none;user-select:none}
 button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
 header{display:flex;align-items:center;gap:8px;margin:4px 0 20px}
-h1{font-size:26px;margin:0;flex:1}
+h1,h2,.msg,.serif{font-family:ui-serif,'New York',Georgia,serif}
+h1{font-size:28px;font-weight:600;margin:0;flex:1}
 .pill{background:var(--soft);border-radius:999px;padding:8px 14px;font-size:15px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px}
-.cat{background:var(--card);border-radius:26px;padding:18px 16px;text-align:left;box-shadow:0 6px 18px #ffadc440;display:flex;flex-direction:column;gap:4px;min-height:132px}
+.cat{background:var(--card);border-radius:26px;padding:18px 16px;text-align:left;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:4px;min-height:132px}
 .cat:active{transform:scale(.97)}
 .cat .emo{font-size:38px;margin-bottom:4px}
-.cat .name{font-weight:600;font-size:17px}
+.cat .name{font:600 18px ui-serif,'New York',Georgia,serif}
 .cat .count{color:var(--muted);font-size:14px}
 .add{border:2px dashed var(--soft);background:transparent;box-shadow:none;color:var(--muted)}
 .cat.add{align-items:center;justify-content:center;font-size:16px}
 .tasks{display:flex;flex-wrap:wrap;gap:10px}
-.task{background:var(--card);border-radius:999px;padding:12px 18px;box-shadow:0 4px 12px #ffadc440;font-size:16px}
+.task{background:var(--card);border-radius:999px;padding:12px 18px;box-shadow:var(--shadow);font-size:16px}
 .task small{color:var(--muted);font-size:11px;margin-left:6px}
 .task.off{opacity:.45}
 .special{justify-content:center}
@@ -36,21 +37,49 @@ h1{font-size:26px;margin:0;flex:1}
 .special .task:nth-child(2){animation-delay:.15s}
 .special .task:nth-child(3){animation-delay:.3s}
 @keyframes appear{from{transform:scale(.6);opacity:0}}
-.task.pop{animation:pop .6s ease forwards;pointer-events:none}
+.task.pop,.opt.pop{animation:pop .6s ease forwards;pointer-events:none}
 @keyframes pop{0%{background:var(--pink);color:#fff}35%{background:var(--pink);color:#fff;transform:scale(1.12)}100%{background:var(--pink);color:#fff;transform:scale(0);opacity:0}}
 .task.add{box-shadow:none}
 .empty{text-align:center;color:var(--muted);padding:40px 0;font-size:17px;width:100%}
 .welcome{display:flex;flex-direction:column;justify-content:center;gap:24px;min-height:80vh}
 .msg{font-size:21px;line-height:1.5;text-align:center;margin:0}
 .go{align-self:center;background:var(--pink);color:#fff;border-radius:999px;padding:12px 24px;font-size:17px}
-.call{display:block;background:var(--pink);color:#fff;text-decoration:none;text-align:center;font-size:24px;font-weight:700;padding:26px;border-radius:26px;box-shadow:0 6px 18px #ffadc480;margin-bottom:24px}
-.sec{font-size:17px;margin:0 0 10px}
+.call{display:flex;align-items:center;gap:14px;background:#1e1a18;color:#fff;text-decoration:none;padding:18px;border-radius:28px;box-shadow:0 10px 28px #1e1a1840;margin-bottom:28px}
+.avatar{width:64px;height:64px;border-radius:50%;border:3px solid #fff3;background:#4a3f39 center/cover;display:grid;place-items:center;font:600 26px ui-serif,Georgia,serif;flex:none}
+.call-t{flex:1;display:flex;flex-direction:column;gap:2px}
+.call-t b{font:600 23px ui-serif,'New York',Georgia,serif}
+.call-t i{color:#fffa;font-size:15px}
+.phone{width:56px;height:56px;border-radius:50%;background:#34c759;display:grid;place-items:center;font-size:24px;flex:none}
+.sec{font-size:13px;letter-spacing:.14em;margin:0;color:var(--muted);font-family:inherit}
+.sub{font:italic 22px ui-serif,'New York',Georgia,serif;margin:4px 0 14px}
+.moods{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.mood{color:#fff;border-radius:26px;padding:20px 12px;display:flex;flex-direction:column;align-items:center;gap:4px;text-align:center;box-shadow:var(--shadow);min-height:150px;justify-content:center}
+.mood:active{transform:scale(.97)}
+.mood:last-child:nth-child(odd){grid-column:span 2}
+.mood .emo,.flow-emo{font-size:44px}
+.mood b{font:600 18px ui-serif,'New York',Georgia,serif}
+.mood small{opacity:.8;font-size:13px}
+.flow{position:fixed;inset:0;overflow:auto;color:#fff;display:flex;flex-direction:column;gap:18px;text-align:center;
+  padding:calc(env(safe-area-inset-top) + 16px) 16px calc(env(safe-area-inset-bottom) + 24px)}
+.flow-top{display:flex;justify-content:space-between;align-items:center;font-size:15px;opacity:.85}
+.flow-top button{font-size:22px;width:40px;height:40px;border-radius:50%;background:#fff2}
+.flow h2{font-size:28px;margin:0}
+.opts{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.opt{background:#fff;color:var(--text);border-radius:24px;padding:22px 10px;display:flex;flex-direction:column;align-items:center;gap:8px;font-size:17px;font-weight:600;box-shadow:0 8px 20px #0002}
+.opt span{font-size:40px}
+.busy{pointer-events:none}
+.sent{background:var(--bg);color:var(--text);justify-content:center}
+.sent h2{font-size:30px}
+.sent ul{list-style:none;padding:0;margin:0;line-height:1.8;color:var(--muted)}
+.sent ul b{color:var(--text)}
+.fun{font:italic 20px ui-serif,'New York',Georgia,serif;margin:0}
+.black{background:#1e1a18;color:#fff;border-radius:999px;padding:16px;font-size:17px;margin-top:12px}
 .grid.big{margin-top:24px;grid-template-columns:1fr 1fr}
 .big .cat{min-height:170px}
 .done-h{margin:28px 0 10px;font-size:15px;color:var(--muted);font-weight:600}
 .edit-cat{margin-top:24px;width:100%;text-align:center;color:var(--muted);padding:12px}
 dialog{border:0;border-radius:24px;padding:20px;width:min(92vw,360px);color:var(--text);background:var(--card)}
-dialog::backdrop{background:#5a3a4840}
+dialog::backdrop{background:#3a2e2840}
 dialog h2{margin:0 0 14px;font-size:19px}
 dialog input[type=text]{width:100%;font-size:17px;padding:12px;border:2px solid var(--soft);border-radius:14px;margin-bottom:12px;outline:none;color:inherit}
 .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:6px}
@@ -78,7 +107,29 @@ dialog input[type=text]{width:100%;font-size:17px;padding:12px;border:2px solid 
 const KEY = 'sinem-rutin-v2';
 const PHONE = '+905382937152';
 const NTFY = 'https://ntfy.sh/sinem-451965c8de30825e4a6b';
-const MOODS = ['Özledim 🥺', 'Canım sıkıldı 😔', 'Acıktım 🍕', 'Mutluyum 😊'];
+const lc = s => s.toLocaleLowerCase('tr');
+// steps: [soru, [[emoji, seçenek], ...]]; msg seçimleri sırayla alır.
+const MOODS = [
+  { emoji: '🚨', name: 'Regl Modu', sub: "Anıl'ı acil çağır", color: '#7b2d3b', fun: 'Anıl çikolatayla yola çıktı! 🏃🍫',
+    steps: [['Ne lazım?', [['🍫', 'Çikolata'], ['🔥', 'Sıcak su torbası'], ['🤗', 'Sarılma'], ['💝', 'Hepsi']]],
+            ['Ağrı ne durumda?', [['🙂', 'Hafif'], ['😕', 'Orta'], ['😣', 'Kötü'], ['😭', 'Çok kötü']]]],
+    msg: (a, b) => `🚨 REGL MODU – ACİL: Sinem'e lazım olan: ${lc(a)}. Ağrı: ${lc(b)}!` },
+  { emoji: '🍕', name: 'Açlık Alarmı', sub: 'ACİL yemek lazım!', color: '#9a5a32', fun: 'Anıl yola çıktı! 🏃',
+    steps: [['Ne yemek istersin?', [['🍕', 'Pizza'], ['🍔', 'Burger'], ['🍣', 'Sushi'], ['🎁', 'Sürpriz']]],
+            ['Ne kadar açsın?', [['🙂', 'Biraz'], ['😋', 'Çok aç'], ['😵', 'BAYILIYORUM'], ['💀', 'Son nefes']]]],
+    msg: (a, b) => `🍕 AÇLIK ALARMI – ACİL: Sinem ${lc(a)} istiyor. Açlık durumu: ${b}!` },
+  { emoji: '😤', name: 'Küstüm', sub: 'Anıl yanıma gel', color: '#25345a', fun: 'Anıl özür provası yapıyor! 🙇‍♂️',
+    steps: [['Neden?', [['🙄', 'Unuttun'], ['💔', 'Kırdın'], ['😒', 'Az ilgilendin'], ['🤷‍♀️', 'Sebepsiz']]],
+            ['Nasıl barışırız?', [['💐', 'Çiçek'], ['🍰', 'Tatlı'], ['🙏', 'Özür'], ['🤗', 'Sarılma']]]],
+    msg: (a, b) => `😤 SİNEM KÜSTÜ: Sebep: ${lc(a)}. Barışmak için: ${lc(b)}!` },
+  { emoji: '🥱', name: 'Canım Sıkılıyor', sub: 'Plan yapalım!', color: '#5a3a74', fun: 'Anıl plan yapmaya başladı! 🗺️',
+    steps: [['Ne yapalım?', [['🚶‍♀️', 'Dışarı çıkalım'], ['🎬', 'Film'], ['🍽️', 'Yemek'], ['🎁', 'Sürpriz']]],
+            ['Ne zaman?', [['⚡', 'Hemen'], ['🌙', 'Akşam'], ['📅', 'Hafta sonu']]]],
+    msg: (a, b) => `🥱 SİNEM'İN CANI SIKILIYOR: İstediği: ${lc(a)}. Ne zaman: ${lc(b)}!` },
+  { emoji: '🥺', name: 'Özledim', sub: 'Sarılmaya ihtiyacım var', color: '#9a4862', fun: 'Anıl sarılmaya geliyor! 🤗',
+    steps: [['Ne kadar?', [['🥹', 'Biraz'], ['🥺', 'Çok'], ['😭', 'Dayanamıyorum']]]],
+    msg: a => `🥺 SİNEM SENİ ÖZLEDİ: Ne kadar: ${lc(a)}!` },
+];
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 const t = (name, type) => ({ id: uid(), name, type, done: null });
 const c = (name, emoji, type, tasks) => ({ id: uid(), name, emoji, type, tasks: tasks.map(n => t(n, type)) });
@@ -101,6 +152,7 @@ try { data = JSON.parse(localStorage.getItem(KEY)) || SEED; } catch { data = SEE
 let view = null;   // null = ana ekran, 'd'/'w' = bölüm, diğer = kategori id'si
 let editing = false;
 let welcome = true;
+let flow = null;   // { m: mod, picks: [], sent }
 
 function save() {
   try { localStorage.setItem(KEY, JSON.stringify(data)); }
@@ -131,11 +183,38 @@ function render() {
     </div>`;
     return;
   }
+  if (flow) {
+    const { m, picks } = flow;
+    if (flow.sent) {
+      app.innerHTML = `<div class="flow sent">
+        <div class="flow-emo">${m.emoji}</div>
+        <h2>Anıl'a iletildi!</h2>
+        <ul>${picks.map((x, i) => `<li>${m.steps[i][0]} <b>${x}</b></li>`).join('')}</ul>
+        <p class="fun">${m.fun}</p>
+        <button class="black" id="closeFlow">Tamam</button>
+      </div>`;
+      return;
+    }
+    const [q, opts] = m.steps[picks.length];
+    app.innerHTML = `<div class="flow" style="background:${m.color}">
+      <div class="flow-top"><span>${picks.length + 1} / ${m.steps.length}</span><button id="closeFlow" aria-label="Kapat">✕</button></div>
+      <div class="flow-emo">${m.emoji}</div>
+      <h2>${q}</h2>
+      <div class="opts">${opts.map(([e, o]) => `<button class="opt" data-opt="${o}"><span>${e}</span>${o}</button>`).join('')}</div>
+    </div>`;
+    return;
+  }
   if (view === null) {
     app.innerHTML = `<header><h1>Merhaba Sinem 🌸</h1></header>
-      <a class="call" href="tel:${PHONE}">Anıl'ı Ara 📞</a>
-      <h2 class="sec">Duygu Modları</h2>
-      <div class="tasks">${MOODS.map(m => `<button class="task" data-mood="${m}">${m}</button>`).join('')}</div>
+      <a class="call" href="tel:${PHONE}">
+        <span class="avatar">A</span><!-- fotoğraf gelince: style="background-image:url(anil.jpg)" ve harfi sil -->
+        <span class="call-t"><b>Anıl'ı Ara</b><i>Bir tık – yanındayım</i></span>
+        <span class="phone">📞</span>
+      </a>
+      <h2 class="sec">DUYGU MODLARI</h2>
+      <p class="sub">Ne hissediyorsun aşkım?</p>
+      <div class="moods">${MOODS.map((m, i) => `<button class="mood" data-mood="${i}" style="background:${m.color}">
+        <span class="emo">${m.emoji}</span><b>${m.name}</b><small>${m.sub}</small></button>`).join('')}</div>
       <div class="grid big">
         ${catBtn('d', '☀️', 'Günlük Görevler', left(data.cats.filter(c => c.type === 'd')))}
         ${catBtn('w', '📅', 'Haftalık Görevler', left(data.cats.filter(c => c.type === 'w')))}
@@ -197,14 +276,13 @@ document.addEventListener('click', e => {
   if (el.dataset.view) { view = el.dataset.view; render(); }
   else if (el.id === 'back') { view = cat ? cat.type : null; editing = false; render(); }
   else if (el.id === 'closeWelcome') { welcome = false; render(); }
-  else if (el.dataset.mood) {
-    el.disabled = true;
-    fetch(NTFY, { method: 'POST', body: 'Sinem: ' + el.dataset.mood })
-      .then(r => { if (!r.ok) throw r; el.textContent = 'Gönderildi 💌'; })
-      .catch(() => alert('Gönderilemedi, internet bağlantını kontrol et.'))
-      .finally(() => setTimeout(render, 1500));
+  else if (el.dataset.mood) { flow = { m: MOODS[el.dataset.mood], picks: [] }; render(); }
+  else if (el.id === 'closeFlow') { flow = null; render(); }
+  else if (el.dataset.opt) {
+    el.parentNode.classList.add('busy');
+    el.classList.add('pop');
+    el.addEventListener('animationend', () => pick(el.dataset.opt), { once: true });
   }
-  else if (el.id === 'toggle') { editing = !editing; render(); }
   else if (el.id === 'addCat') {
     ask({ title: 'Yeni kategori', emoji: '' }, (_, v) => { data.cats.push({ id: uid(), name: v.name, emoji: v.emoji, type: view, tasks: [] }); save(); render(); });
   }
@@ -236,13 +314,26 @@ document.addEventListener('click', e => {
   }
 });
 
+async function pick(o) {
+  const f = flow;
+  f.picks.push(o);
+  if (f.picks.length === f.m.steps.length) {
+    try {
+      const r = await fetch(NTFY, { method: 'POST', body: f.m.msg(...f.picks) });
+      if (!r.ok) throw r;
+      f.sent = true;
+    } catch { alert('Gönderilemedi, internet bağlantını kontrol et.'); f.picks.pop(); }
+  }
+  if (flow === f) render();
+}
+
 // Uygulama tekrar açıldığında karşılamayı göster ve listeyi tazele.
 let hiddenAt = 0;
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) { hiddenAt = Date.now(); return; }
   if ($('dlg').open) return;
   // shortcut: 5 dk'dan kısa arka plan (ör. arama, ntfy) "yeniden açılış" sayılmaz; gerekirse süreyi değiştir.
-  if (Date.now() - hiddenAt > 5 * 60e3) { welcome = true; view = null; editing = false; }
+  if (Date.now() - hiddenAt > 5 * 60e3) { welcome = true; view = null; editing = false; flow = null; }
   render();
 });
 
