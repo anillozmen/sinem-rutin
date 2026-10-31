@@ -32,11 +32,6 @@ h1{font-size:28px;font-weight:600;margin:0;flex:1}
 .task{background:var(--card);border-radius:999px;padding:12px 18px;box-shadow:var(--shadow);font-size:16px}
 .task small{color:var(--muted);font-size:11px;margin-left:6px}
 .task.off{opacity:.45}
-.special{justify-content:center}
-.special .task{animation:appear .45s ease backwards}
-.special .task:nth-child(2){animation-delay:.15s}
-.special .task:nth-child(3){animation-delay:.3s}
-@keyframes appear{from{transform:scale(.6);opacity:0}}
 .task.pop,.opt.pop{animation:pop .6s ease forwards;pointer-events:none}
 @keyframes pop{0%{background:var(--pink);color:#fff}35%{background:var(--pink);color:#fff;transform:scale(1.12)}100%{background:var(--pink);color:#fff;transform:scale(0);opacity:0}}
 .task.add{box-shadow:none}
@@ -76,11 +71,21 @@ h1{font-size:28px;font-weight:600;margin:0;flex:1}
 .black{background:#1e1a18;color:#fff;border-radius:999px;padding:16px;font-size:17px;margin-top:12px}
 .grid.big{margin-top:24px;grid-template-columns:1fr 1fr}
 .big .cat{min-height:170px}
-.done-h{margin:28px 0 10px;font-size:15px;color:var(--muted);font-weight:600}
+.big .cat:last-child:nth-child(odd){grid-column:span 2;min-height:120px}
+.sect{margin-bottom:26px}
+.sect .sec{text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.sect .sec .pill{font-size:13px;padding:4px 10px;letter-spacing:0}
+.yay{text-align:center;margin:0 0 24px}
+textarea{width:100%;min-height:120px;font:inherit;font-size:17px;padding:14px;border:0;border-radius:20px;background:var(--card);box-shadow:var(--shadow);color:inherit;outline:none;resize:vertical;-webkit-user-select:text;user-select:text}
+.notes{display:flex;flex-direction:column;gap:12px;margin-top:22px}
+.note{background:var(--card);border-radius:20px;padding:14px 16px;text-align:left;box-shadow:var(--shadow);white-space:pre-wrap;font-size:16px;line-height:1.4}
+.note small{display:block;color:var(--muted);font-size:12px;margin-bottom:6px}
+.note.on{outline:2px solid var(--pink)}
 .edit-cat{margin-top:24px;width:100%;text-align:center;color:var(--muted);padding:12px}
 dialog{border:0;border-radius:24px;padding:20px;width:min(92vw,360px);color:var(--text);background:var(--card)}
 dialog::backdrop{background:#3a2e2840}
 dialog h2{margin:0 0 14px;font-size:19px}
+dialog select{width:100%;font-size:17px;padding:12px;border:2px solid var(--soft);border-radius:14px;margin-bottom:12px;background:var(--card);color:inherit}
 dialog input[type=text]{width:100%;font-size:17px;padding:12px;border:2px solid var(--soft);border-radius:14px;margin-bottom:12px;outline:none;color:inherit}
 .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:6px}
 .actions .del{margin-right:auto;color:#d9536f}
@@ -95,6 +100,7 @@ dialog input[type=text]{width:100%;font-size:17px;padding:12px;border:2px solid 
     <h2 id="dTitle"></h2>
     <input type="text" id="dEmoji" placeholder="Emoji (ör. 🌸)" maxlength="8">
     <input type="text" id="dName" placeholder="Ad" required>
+    <select id="dSec"></select>
     <div class="actions">
       <button value="del" class="del" id="dDel" formnovalidate>Sil</button>
       <button value="cancel" formnovalidate>İptal</button>
@@ -104,7 +110,7 @@ dialog input[type=text]{width:100%;font-size:17px;padding:12px;border:2px solid 
 </dialog>
 
 <script>
-const KEY = 'sinem-rutin-v2';
+const KEY = 'sinem-rutin-v3';
 const PHONE = '+905382937152';
 const NTFY = 'https://ntfy.sh/sinem-451965c8de30825e4a6b';
 const lc = s => s.toLocaleLowerCase('tr');
@@ -133,25 +139,51 @@ const MOODS = [
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 const t = (name, type) => ({ id: uid(), name, type, done: null });
 const c = (name, emoji, type, tasks) => ({ id: uid(), name, emoji, type, tasks: tasks.map(n => t(n, type)) });
+const DAYS = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
+const WEEK = [
+  ['Çamaşırları yıka'],
+  ['Banyoyu temizle'],
+  ["Bubble'ı tara", 'Ped stoğunu kontrol et'],
+  ['Toz al', 'Giyinme odasını düzenle'],
+  ['Buzdolabını kontrol et', 'Market listesi yap'],
+  ['Süpür ve paspas yap', 'Nevresimi değiştir'],
+  ['Haftanın yemeklerini planla / 2-3 öğün hazırla', 'Kendine bakım günü (maske, manikür)'],
+];
+// Günlük bölümler type 'd'; haftalık görevler her gün için bir bölümde (type 'w', day 0 = Pazartesi).
 const SEED = {
-  special: ['Yatağını topla', 'Kahvaltını yap', "Anıl'a çok sevdiğini söylediğin videolar ve fotoğraflar gönder"].map(n => t(n, 'd')),
   cats: [
-    c('Temizlik', '🧹', 'd', ['Bulaşıkları yerleştir']),
-    c('Kişisel Bakım', '🧴', 'd', ['Cilt bakımı yap', 'Vitaminleri al']),
-    c('Köpek', '🐶', 'd', ["Bubble'a mama ver"]),
-    c('Kahvaltı', '🥐', 'd', ['Kahvaltı hazırla', 'Kahvaltı sonrası masayı topla']),
-    c('Temizlik', '🧹', 'w', ['Giyinme odasını düzenle', 'Çamaşırları yıka']),
-    c('Kişisel Bakım', '🧴', 'w', ['Saç maskesi yap']),
-    c('Mutfak', '🍳', 'w', ['Buzdolabını kontrol et', 'Market listesi hazırla']),
-    c('Köpek', '🐶', 'w', ["Bubble'ı tara"]),
+    c('Sabah', '🌅', 'd', ["Bubble'a mama ver", 'Bir bardak su iç', 'Kahvaltını yap (yetişmiyorsan yanına al)', 'Yemek termosunu çantaya koy', 'Yatağını topla']),
+    c('Akşam', '🌙', 'd', ["Bubble'ın pedini ve etrafını kontrol et, temizle", 'Üstünü değiştir, rahatla', 'Yemek yap (yarın için termosa ayır)', "Bubble'a mama ver", 'Mutfağı topla', 'Kendine 30 dakika ayır (kitap, dizi, yürüyüş… sadece senin)', 'Makyajını temizle, cilt bakımını yap', 'Yarın için çantanı hazırla', 'Günlüğüne bir satır yaz']),
+    ...DAYS.map((d, i) => ({ ...c(d, '📅', 'w', WEEK[i]), day: i })),
   ],
+  notes: [],
+  seen: '',   // karşılamanın en son gösterildiği gün
 };
+const MESSAGES = [
+  'Canım aşkım, bugün yapılacak işlerin bunlar ama enerjin ve güzelliğin hepsinin üzerinden gelecektir. Seni çok seviyorum ❤️',
+  'Günaydın güzelim, seninle uyanmak dünyanın en güzel şansı. Seni seviyorum 💕',
+  'Gülüşün bütün günümü aydınlatıyor aşkım, bugün de bol bol gül ☀️',
+  'Ne yaparsan yap, benim gözümde hep en harikasısın. Seni çok seviyorum 🌸',
+  'Bugün kendine iyi bak sevgilim, sen benim en değerli hazinemsin 💖',
+  'Aşkım, yorulursan bir nefes al; ben hep yanındayım 🤍',
+  "Seninle geçen her gün bir hediye. İyi ki varsın Sinem'im 🎁",
+  'Bugün de çok güzel olacaksın, çünkü sen güzelliğin ta kendisisin ✨',
+  'Canım aşkım, kalbim her an seninle. Harika bir gün geçir 💕',
+  'Küçük adımlar da çok değerli; seninle her zaman gurur duyuyorum 🌷',
+  'Bugün ne olursa olsun, akşam seni sımsıkı saracak biri var: ben 🤗',
+  "Bubble'la ben, seni dünyanın en çok seven ikilisiyiz 🐶❤️",
+  'Gözlerin, gülüşün, kalbin… Hepsine ayrı ayrı aşığım 😍',
+  'Bugün kendini şımart aşkım, bunu fazlasıyla hak ediyorsun 💅',
+  'Seni sevmek hayatımın en güzel işi. Günaydın sevgilim 🌞',
+];
 
 let data;
 try { data = JSON.parse(localStorage.getItem(KEY)) || SEED; } catch { data = SEED; }
-let view = null;   // null = ana ekran, 'd'/'w' = bölüm, diğer = kategori id'si
+let view = null;   // null = ana ekran, 'd' = günlük, 'w' = haftalık, 'j' = günlük notlar
 let editing = false;
-let welcome = true;
+let welcome = false;
+let celebrate = false;
+let noteId = null; // düzenlenen not
 let flow = null;   // { m: mod, picks: [], sent }
 
 function save() {
@@ -168,18 +200,51 @@ function periodKey(type, d = new Date()) {
 const isDone = task => task.done === periodKey(task.type);
 const left = cs => cs.reduce((n, cat) => n + cat.tasks.filter(x => !isDone(x)).length, 0);
 const leftLabel = n => n ? n + ' görev kaldı' : 'Hepsi tamam 💖';
-const catBtn = (id, emoji, name, n) => `<button class="cat" data-view="${id}"><span class="emo">${esc(emoji)}</span><span class="name">${esc(name)}</span><span class="count">${leftLabel(n)}</span></button>`;
+const catBtn = (id, emoji, name, label) => `<button class="cat" data-view="${id}"><span class="emo">${esc(emoji)}</span><span class="name">${esc(name)}</span><span class="count">${label}</span></button>`;
 const esc = s => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const $ = id => document.getElementById(id);
+const today = () => (new Date().getDay() + 6) % 7;
+const dailyCats = () => data.cats.filter(c => c.type === 'd');
+const weekCats = () => data.cats.filter(c => c.type === 'w');
+const todayCats = () => [...dailyCats(), ...weekCats().filter(c => c.day === today())];
+const findTask = id => { for (const cat of data.cats) { const task = cat.tasks.find(x => x.id === id); if (task) return [cat, task]; } };
+const dayNo = d => Math.round(new Date(d.getFullYear(), d.getMonth(), d.getDate()) / 864e5);
+const YAY = 'Bugün harikaydın aşkım, gerisi senin zamanın 💕';
+
+function section(cat, title) {
+  const shown = editing ? cat.tasks : cat.tasks.filter(x => !isDone(x));
+  return `<section class="sect">
+    <h2 class="sec">${title}${editing && cat.type === 'd' ? ` <button class="pill" data-editcat="${cat.id}">✏️</button>` : ''}</h2>
+    <div class="tasks">
+      ${shown.map(x => `<button class="task${editing && isDone(x) ? ' off' : ''}" data-task="${x.id}">${editing ? '✏️ ' : ''}${esc(x.name)}</button>`).join('')}
+      ${editing ? '' : cat.tasks.filter(isDone).map(x => `<button class="task off" data-undo="${x.id}">↩️ ${esc(x.name)}</button>`).join('')}
+      <button class="task add" data-add="${cat.id}">+ Görev</button>
+    </div>
+  </section>`;
+}
+
+function page(title, body) {
+  return `<header>
+      <button class="pill" id="back" aria-label="Geri">‹</button>
+      <h1>${title}</h1>
+      ${view === 'j' ? '' : `<button class="pill" id="toggle">${editing ? 'Bitti' : 'Düzenle'}</button>`}
+    </header>${body}`;
+}
 
 function render() {
   const app = $('app');
   if (welcome) {
-    const todo = data.special.filter(x => !isDone(x));
     app.innerHTML = `<div class="welcome">
-      <p class="msg">Canım aşkım, bugün yapılacak işlerin bunlar ama enerjin ve güzelliğin hepsinin üzerinden gelecektir. Seni çok seviyorum ❤️</p>
-      <div class="tasks special">${todo.map(x => `<button class="task" data-task="${x.id}">${esc(x.name)}</button>`).join('') || '<div class="empty">Bugünün özel görevleri tamam 💖</div>'}</div>
+      <p class="msg">${MESSAGES[dayNo(new Date()) % MESSAGES.length]}</p>
       <button class="go" id="closeWelcome">Ana sayfaya geç ›</button>
+    </div>`;
+    return;
+  }
+  if (celebrate) {
+    app.innerHTML = `<div class="flow sent">
+      <div class="flow-emo">🎉</div>
+      <h2>${YAY}</h2>
+      <button class="black" id="closeYay">Tamam</button>
     </div>`;
     return;
   }
@@ -204,62 +269,61 @@ function render() {
     </div>`;
     return;
   }
-  if (view === null) {
-    app.innerHTML = `<header><h1>Merhaba Sinem 🌸</h1></header>
-      <a class="call" href="tel:${PHONE}">
-        <span class="avatar">A</span><!-- fotoğraf gelince: style="background-image:url(anil.jpg)" ve harfi sil -->
-        <span class="call-t"><b>Anıl'ı Ara</b><i>Bir tık – yanındayım</i></span>
-        <span class="phone">📞</span>
-      </a>
-      <h2 class="sec">DUYGU MODLARI</h2>
-      <p class="sub">Ne hissediyorsun aşkım?</p>
-      <div class="moods">${MOODS.map((m, i) => `<button class="mood" data-mood="${i}" style="background:${m.color}">
-        <span class="emo">${m.emoji}</span><b>${m.name}</b><small>${m.sub}</small></button>`).join('')}</div>
-      <div class="grid big">
-        ${catBtn('d', '☀️', 'Günlük Görevler', left(data.cats.filter(c => c.type === 'd')))}
-        ${catBtn('w', '📅', 'Haftalık Görevler', left(data.cats.filter(c => c.type === 'w')))}
-      </div>`;
+  if (view === 'd') {
+    app.innerHTML = page('Günlük Görevler', `
+      ${!editing && !left(todayCats()) ? `<p class="fun yay">${YAY}</p>` : ''}
+      ${dailyCats().map(c => section(c, `${esc(c.emoji || '')} ${esc(c.name)}`)).join('')}
+      ${weekCats().filter(c => c.day === today()).map(c => section(c, `📅 Bugün · ${c.name}`)).join('')}
+      ${editing ? '<button class="edit-cat" id="addCat">+ Bölüm ekle</button>' : ''}`);
     return;
   }
-  if (view === 'd' || view === 'w') {
-    app.innerHTML = `<header>
-        <button class="pill" id="back" aria-label="Geri">‹</button>
-        <h1>${view === 'd' ? 'Günlük' : 'Haftalık'} Görevler</h1>
-      </header>
-      <div class="grid">
-        ${data.cats.filter(c => c.type === view).map(c => catBtn(c.id, c.emoji || '🌸', c.name, left([c]))).join('')}
-        <button class="cat add" id="addCat">+ Kategori</button>
-      </div>`;
+  if (view === 'w') {
+    app.innerHTML = page('Haftalık Görevler', weekCats().map(c => section(c, c.name + (c.day === today() ? ' · Bugün' : ''))).join(''));
     return;
   }
-  const cat = data.cats.find(c => c.id === view);
-  if (!cat) { view = null; editing = false; return render(); }
-  const shown = editing ? cat.tasks : cat.tasks.filter(x => !isDone(x));
-  app.innerHTML = `<header>
-      <button class="pill" id="back" aria-label="Geri">‹</button>
-      <h1>${esc(cat.emoji || '')} ${esc(cat.name)}</h1>
-      <button class="pill" id="toggle">${editing ? 'Bitti' : 'Düzenle'}</button>
-    </header>
-    <div class="tasks">
-      ${shown.map(x => `<button class="task${editing && isDone(x) ? ' off' : ''}" data-task="${x.id}">
-        ${editing ? '✏️ ' : ''}${esc(x.name)}</button>`).join('')}
-      ${!shown.length ? '<div class="empty">Bugünlük hepsi tamam 💖</div>' : ''}
-      <button class="task add" id="addTask">+ Görev</button>
-    </div>
-    ${!editing && cat.tasks.some(isDone) ? `<h2 class="done-h">Yapılanlar · geri almak için dokun</h2>
-    <div class="tasks">${cat.tasks.filter(isDone).map(x => `<button class="task off" data-undo="${x.id}">↩️ ${esc(x.name)}</button>`).join('')}</div>` : ''}
-    ${editing ? '<button class="edit-cat" id="editCat">Kategoriyi düzenle / sil</button>' : ''}`;
+  if (view === 'j') {
+    const n = data.notes.find(x => x.id === noteId);
+    const fmt = iso => new Date(iso).toLocaleString('tr-TR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    app.innerHTML = page('Günlüğüm 📖', `
+      <textarea id="note" placeholder="Bugün aklından neler geçti?">${n ? esc(n.text) : ''}</textarea>
+      <div class="actions">
+        ${n ? '<button class="del" id="delNote">Sil</button><button id="cancelNote">Vazgeç</button>' : ''}
+        <button class="ok" id="saveNote">${n ? 'Güncelle' : 'Kaydet'}</button>
+      </div>
+      <div class="notes">
+        ${[...data.notes].sort((a, b) => b.date.localeCompare(a.date)).map(x => `<button class="note${x.id === noteId ? ' on' : ''}" data-note="${x.id}"><small>${fmt(x.date)}</small>${esc(x.text)}</button>`).join('') || '<div class="empty">Henüz not yok</div>'}
+      </div>`);
+    return;
+  }
+  view = null;
+  app.innerHTML = `<header><h1>Merhaba Sinem 🌸</h1></header>
+    <a class="call" href="tel:${PHONE}">
+      <span class="avatar">A</span><!-- fotoğraf gelince: style="background-image:url(anil.jpg)" ve harfi sil -->
+      <span class="call-t"><b>Anıl'ı Ara</b><i>Bir tık – yanındayım</i></span>
+      <span class="phone">📞</span>
+    </a>
+    <h2 class="sec">DUYGU MODLARI</h2>
+    <p class="sub">Ne hissediyorsun aşkım?</p>
+    <div class="moods">${MOODS.map((m, i) => `<button class="mood" data-mood="${i}" style="background:${m.color}">
+      <span class="emo">${m.emoji}</span><b>${m.name}</b><small>${m.sub}</small></button>`).join('')}</div>
+    <div class="grid big">
+      ${catBtn('d', '☀️', 'Günlük Görevler', leftLabel(left(todayCats())))}
+      ${catBtn('w', '📅', 'Haftalık Görevler', leftLabel(left(weekCats())))}
+      ${catBtn('j', '📖', 'Günlüğüm', data.notes.length + ' not')}
+    </div>`;
 }
 
-function ask({ title, name = '', emoji, canDelete }, done) {
+function ask({ title, name = '', emoji, sec, canDelete }, done) {
   const dlg = $('dlg');
   $('dTitle').textContent = title;
   $('dName').value = name;
   $('dEmoji').hidden = emoji === undefined;
   $('dEmoji').value = emoji || '';
+  $('dSec').hidden = !sec;
+  if (sec) $('dSec').innerHTML = sec.cats.map(c => `<option value="${c.id}"${c.id === sec.value ? ' selected' : ''}>${esc(c.name)}</option>`).join('');
   $('dDel').hidden = !canDelete;
   dlg.onclose = () => {
-    const vals = { name: $('dName').value.trim(), emoji: $('dEmoji').value.trim() };
+    const vals = { name: $('dName').value.trim(), emoji: $('dEmoji').value.trim(), sec: $('dSec').value };
     if (dlg.returnValue === 'ok' && vals.name) done('ok', vals);
     if (dlg.returnValue === 'del') done('del');
     dlg.returnValue = '';
@@ -267,15 +331,18 @@ function ask({ title, name = '', emoji, canDelete }, done) {
   dlg.showModal();
 }
 
+const sameType = cat => data.cats.filter(c => c.type === cat.type);
+const catById = id => data.cats.find(c => c.id === id);
+
 document.addEventListener('click', e => {
   const el = e.target.closest('button');
   if (!el || el.closest('dialog')) return;
-  const cat = data.cats.find(c => c.id === view);
-  const list = welcome ? data.special : cat?.tasks;
 
-  if (el.dataset.view) { view = el.dataset.view; render(); }
-  else if (el.id === 'back') { view = cat ? cat.type : null; editing = false; render(); }
-  else if (el.id === 'closeWelcome') { welcome = false; render(); }
+  if (el.dataset.view) { view = el.dataset.view; render(); scrollTo(0, 0); }
+  else if (el.id === 'back') { view = null; editing = false; noteId = null; render(); }
+  else if (el.id === 'toggle') { editing = !editing; render(); }
+  else if (el.id === 'closeWelcome') { welcome = false; data.seen = ymd(new Date()); save(); render(); }
+  else if (el.id === 'closeYay') { celebrate = false; render(); }
   else if (el.dataset.mood) { flow = { m: MOODS[el.dataset.mood], picks: [] }; render(); }
   else if (el.id === 'closeFlow') { flow = null; render(); }
   else if (el.dataset.opt) {
@@ -284,33 +351,52 @@ document.addEventListener('click', e => {
     el.addEventListener('animationend', () => pick(el.dataset.opt), { once: true });
   }
   else if (el.id === 'addCat') {
-    ask({ title: 'Yeni kategori', emoji: '' }, (_, v) => { data.cats.push({ id: uid(), name: v.name, emoji: v.emoji, type: view, tasks: [] }); save(); render(); });
+    ask({ title: 'Yeni bölüm', emoji: '' }, (_, v) => { data.cats.push({ id: uid(), name: v.name, emoji: v.emoji, type: 'd', tasks: [] }); save(); render(); });
   }
-  else if (el.id === 'editCat') {
-    ask({ title: 'Kategoriyi düzenle', name: cat.name, emoji: cat.emoji, canDelete: true }, (a, v) => {
-      if (a === 'del') { if (!confirm(`"${cat.name}" ve içindeki tüm görevler silinsin mi?`)) return; data.cats = data.cats.filter(c => c !== cat); view = cat.type; }
+  else if (el.dataset.editcat) {
+    const cat = catById(el.dataset.editcat);
+    ask({ title: 'Bölümü düzenle', name: cat.name, emoji: cat.emoji, canDelete: true }, (a, v) => {
+      if (a === 'del') { if (!confirm(`"${cat.name}" ve içindeki tüm görevler silinsin mi?`)) return; data.cats = data.cats.filter(c => c !== cat); }
       else { cat.name = v.name; cat.emoji = v.emoji; }
       save(); render();
     });
   }
-  else if (el.id === 'addTask') {
-    ask({ title: 'Yeni görev' }, (_, v) => { cat.tasks.push(t(v.name, cat.type)); save(); render(); });
+  else if (el.dataset.add) {
+    const cat = catById(el.dataset.add);
+    ask({ title: 'Yeni görev', sec: { cats: sameType(cat), value: cat.id } }, (_, v) => { catById(v.sec).tasks.push(t(v.name, cat.type)); save(); render(); });
   }
-  else if (el.dataset.undo) { cat.tasks.find(x => x.id === el.dataset.undo).done = null; save(); render(); }
+  else if (el.dataset.undo) { findTask(el.dataset.undo)[1].done = null; save(); render(); }
   else if (el.dataset.task) {
-    const task = list.find(x => x.id === el.dataset.task);
+    const [cat, task] = findTask(el.dataset.task);
     if (editing) {
-      ask({ title: 'Görevi düzenle', name: task.name, canDelete: true }, (a, v) => {
+      ask({ title: 'Görevi düzenle', name: task.name, sec: { cats: sameType(cat), value: cat.id }, canDelete: true }, (a, v) => {
         if (a === 'del') cat.tasks = cat.tasks.filter(x => x !== task);
-        else task.name = v.name;
+        else {
+          task.name = v.name;
+          if (v.sec !== cat.id) { cat.tasks = cat.tasks.filter(x => x !== task); catById(v.sec).tasks.push(task); }
+        }
         save(); render();
       });
     } else {
       task.done = periodKey(task.type);
       save();
+      const yay = todayCats().includes(cat) && !left(todayCats());
       el.classList.add('pop');
-      el.addEventListener('animationend', render, { once: true });
+      el.addEventListener('animationend', () => { celebrate = yay; render(); }, { once: true });
     }
+  }
+  else if (el.id === 'saveNote') {
+    const text = $('note').value.trim();
+    if (!text) return;
+    const n = data.notes.find(x => x.id === noteId);
+    if (n) n.text = text; else data.notes.push({ id: uid(), date: new Date().toISOString(), text });
+    noteId = null; save(); render();
+  }
+  else if (el.dataset.note) { noteId = el.dataset.note; render(); scrollTo(0, 0); }
+  else if (el.id === 'cancelNote') { noteId = null; render(); }
+  else if (el.id === 'delNote') {
+    if (!confirm('Bu not silinsin mi?')) return;
+    data.notes = data.notes.filter(x => x.id !== noteId); noteId = null; save(); render();
   }
 });
 
@@ -327,16 +413,15 @@ async function pick(o) {
   if (flow === f) render();
 }
 
-// Uygulama tekrar açıldığında karşılamayı göster ve listeyi tazele.
-let hiddenAt = 0;
+// Uygulama tekrar açıldığında listeyi tazele; o günün ilk açılışıysa karşılamayı göster.
+// Günlük notlar ekranı yazılan taslak kaybolmasın diye yeniden çizilmez.
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) { hiddenAt = Date.now(); return; }
-  if ($('dlg').open) return;
-  // shortcut: 5 dk'dan kısa arka plan (ör. arama, ntfy) "yeniden açılış" sayılmaz; gerekirse süreyi değiştir.
-  if (Date.now() - hiddenAt > 5 * 60e3) { welcome = true; view = null; editing = false; flow = null; }
+  if (document.hidden || $('dlg').open || view === 'j') return;
+  if (data.seen !== ymd(new Date())) { welcome = true; flow = null; }
   render();
 });
 
+welcome = data.seen !== ymd(new Date());
 render();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
 </script>
