@@ -5,11 +5,11 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Rutin">
+<meta name="apple-mobile-web-app-title" content="Anıl'ım Halleder">
 <meta name="theme-color" content="#f6efe4">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon.png">
-<title>Sinem'in Rutini</title>
+<title>Anıl'ım Halleder</title>
 <style>
 :root{--bg:#f6efe4;--card:#fffdf8;--pink:#ff8fb1;--soft:#e9dfd0;--text:#3a2e28;--muted:#9a8b7d;--shadow:0 8px 24px #3a2e2814}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -121,6 +121,9 @@ input{-webkit-user-select:text;user-select:text}
 <script>
 const FIREBASE = {"apiKey":"AIzaSyAKJ0thuvqp0Pw7SlIrKw5FUGgAptJwybE","authDomain":"sinem-rutin-6078.firebaseapp.com","projectId":"sinem-rutin-6078","appId":"1:678898898593:web:a006c17b948df36901c2e0"};
 const DOMAIN = '@sinem-rutin.app';   // Firebase e-posta ister; kullanıcı adı bu uzantıyla e-postaya çevrilir
+// anil hesabı Sinem'in verisini sadece görür (Firestore kuralı da yalnızca okumaya izin verir).
+const VIEWER = 'anil' + DOMAIN, SINEM_UID = 'tHNXU8bhZVM71nrXcloutAP6tiH3';
+let viewer = false;
 firebase.initializeApp(FIREBASE);
 const auth = firebase.auth(), db = firebase.firestore();
 const KEY = 'sinem-rutin-v3';
@@ -261,6 +264,9 @@ function page(title, body) {
     </header>${body}`;
 }
 
+const fmt = iso => new Date(iso).toLocaleString('tr-TR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+const newestFirst = notes => [...notes].sort((a, b) => b.date.localeCompare(a.date));
+
 function render() {
   const app = $('app');
   if (user === undefined) return;
@@ -272,6 +278,19 @@ function render() {
       <p class="err" id="lErr"></p>
       <button class="go">Giriş yap</button>
     </form>`;
+    return;
+  }
+  if (viewer) {
+    const list = (c, title) => `<section class="sect"><h2 class="sec">${title}</h2><div class="tasks">
+      ${c.tasks.map(x => `<span class="task${isDone(x) ? '' : ' off'}">${isDone(x) ? '✅' : '⬜'} ${esc(x.name)}</span>`).join('')}</div></section>`;
+    const all = todayCats().flatMap(c => c.tasks);
+    app.innerHTML = `<header><h1>Sinem'in Günü 🌸</h1></header>
+      <p class="sub">Bugün ${all.filter(isDone).length} / ${all.length} görev tamam</p>
+      ${dailyCats().map(c => list(c, `${esc(c.emoji || '')} ${esc(c.name)}`)).join('')}
+      ${weekCats().map(c => list(c, c.name + (c.day === today() ? ' · Bugün' : ''))).join('')}
+      <h2 class="sec">GÜNLÜĞÜ</h2>
+      <div class="notes">${newestFirst(data.notes).map(x => `<div class="note"><small>${fmt(x.date)}</small>${esc(x.text)}</div>`).join('') || '<div class="empty">Henüz not yok</div>'}</div>
+      <button class="edit-cat" id="logout">Çıkış yap</button>`;
     return;
   }
   if (welcome) {
@@ -324,7 +343,6 @@ function render() {
   }
   if (view === 'j') {
     const n = data.notes.find(x => x.id === noteId);
-    const fmt = iso => new Date(iso).toLocaleString('tr-TR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
     app.innerHTML = page('Günlüğüm 📖', `
       <textarea id="note" placeholder="Bugün aklından neler geçti?">${n ? esc(n.text) : ''}</textarea>
       <div class="actions">
@@ -332,7 +350,7 @@ function render() {
         <button class="ok" id="saveNote">${n ? 'Güncelle' : 'Kaydet'}</button>
       </div>
       <div class="notes">
-        ${[...data.notes].sort((a, b) => b.date.localeCompare(a.date)).map(x => `<button class="note${x.id === noteId ? ' on' : ''}" data-note="${x.id}"><small>${fmt(x.date)}</small>${esc(x.text)}</button>`).join('') || '<div class="empty">Henüz not yok</div>'}
+        ${newestFirst(data.notes).map(x => `<button class="note${x.id === noteId ? ' on' : ''}" data-note="${x.id}"><small>${fmt(x.date)}</small>${esc(x.text)}</button>`).join('') || '<div class="empty">Henüz not yok</div>'}
       </div>`);
     return;
   }
@@ -460,6 +478,7 @@ async function pick(o) {
 // Uygulama tekrar açıldığında listeyi tazele; o günün ilk açılışıysa karşılamayı göster.
 // Günlük notlar ekranı yazılan taslak kaybolmasın diye yeniden çizilmez.
 document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && viewer) return loadSinem();
   if (document.hidden || $('dlg').open || view === 'j') return;
   if (data.seen !== ymd(new Date())) { welcome = true; flow = null; }
   render();
@@ -473,12 +492,20 @@ document.addEventListener('submit', e => {
     .catch(() => $('lErr').textContent = 'Kullanıcı adı ya da şifre yanlış.');
 });
 
+async function loadSinem() {
+  try { data = JSON.parse((await db.collection('users').doc(SINEM_UID).get()).data().json); }
+  catch { alert("Sinem'in verisi alınamadı."); }
+  render();
+}
+
 function show(d) { data = d; welcome = data.seen !== ymd(new Date()); render(); }
 
 auth.onAuthStateChanged(async u => {
   user = u;
   view = null; editing = false; flow = null;
+  viewer = u?.email === VIEWER;
   if (!u) return render();
+  if (viewer) return loadSinem();
   let local = null;
   // İlk girişte giriş öncesi telefondaki veri (eski anahtar) buluta taşınır.
   try { local = JSON.parse(localStorage.getItem(cacheKey()) || localStorage.getItem(KEY)); } catch {}
