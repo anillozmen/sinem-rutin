@@ -124,6 +124,7 @@ const DOMAIN = '@sinem-rutin.app';   // Firebase e-posta ister; kullanıcı adı
 // anil hesabı Sinem'in verisini sadece görür (Firestore kuralı da yalnızca okumaya izin verir).
 const VIEWER = 'anil' + DOMAIN, SINEM_UID = 'tHNXU8bhZVM71nrXcloutAP6tiH3';
 let viewer = false;
+const demo = new URLSearchParams(location.search).has('demo');  // girişsiz, örnek verili, buluta yazmayan mod
 firebase.initializeApp(FIREBASE);
 const auth = firebase.auth(), db = firebase.firestore();
 const KEY = 'sinem-rutin-v3';
@@ -210,7 +211,7 @@ function save() {
   data.updated = Date.now();
   try { localStorage.setItem(cacheKey(), JSON.stringify(data)); }
   catch { alert('Kaydedilemedi! Tarayıcı depolaması kapalı olabilir.'); }
-  remote().set({ json: JSON.stringify(data) }).catch(() => alert('Buluta kaydedilemedi.'));
+  if (!demo) remote().set({ json: JSON.stringify(data) }).catch(() => alert('Buluta kaydedilemedi.'));
 }
 
 const ymd = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
@@ -500,7 +501,15 @@ async function loadSinem() {
 
 function show(d) { data = d; welcome = data.seen !== ymd(new Date()); render(); }
 
+if (demo) {
+  user = { uid: 'demo' };
+  let d = null;
+  try { d = JSON.parse(localStorage.getItem(cacheKey())); } catch {}
+  show(d || SEED);
+}
+
 auth.onAuthStateChanged(async u => {
+  if (demo) return;
   user = u;
   view = null; editing = false; flow = null;
   viewer = u?.email === VIEWER;
