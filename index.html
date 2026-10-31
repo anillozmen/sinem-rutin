@@ -90,7 +90,9 @@ dialog{border:0;border-radius:24px;padding:20px;width:min(92vw,360px);color:var(
 dialog::backdrop{background:#3a2e2840}
 dialog h2{margin:0 0 14px;font-size:19px}
 dialog select{width:100%;font-size:17px;padding:12px;border:2px solid var(--soft);border-radius:14px;margin-bottom:12px;background:var(--card);color:inherit}
-dialog input[type=text]{width:100%;font-size:17px;padding:12px;border:2px solid var(--soft);border-radius:14px;margin-bottom:12px;outline:none;color:inherit}
+input{-webkit-user-select:text;user-select:text}
+.err{color:#d9536f;text-align:center;margin:0;min-height:1.2em}
+.field,dialog input[type=text]{width:100%;font-size:17px;padding:12px;border:2px solid var(--soft);border-radius:14px;margin-bottom:12px;outline:none;color:inherit}
 .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:6px}
 .actions .del{margin-right:auto;color:#d9536f}
 .actions .ok{background:var(--pink);color:#fff;border-radius:999px;padding:8px 18px}
@@ -113,7 +115,14 @@ dialog input[type=text]{width:100%;font-size:17px;padding:12px;border:2px solid 
   </form>
 </dialog>
 
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script>
+const FIREBASE = {"apiKey":"AIzaSyAKJ0thuvqp0Pw7SlIrKw5FUGgAptJwybE","authDomain":"sinem-rutin-6078.firebaseapp.com","projectId":"sinem-rutin-6078","appId":"1:678898898593:web:a006c17b948df36901c2e0"};
+const DOMAIN = '@sinem-rutin.app';   // Firebase e-posta ister; kullanıcı adı bu uzantıyla e-postaya çevrilir
+firebase.initializeApp(FIREBASE);
+const auth = firebase.auth(), db = firebase.firestore();
 const KEY = 'sinem-rutin-v3';
 const PHONE = '+905382937152';
 const NTFY = 'https://ntfy.sh/sinem-451965c8de30825e4a6b';
@@ -181,8 +190,8 @@ const MESSAGES = [
   'Seni sevmek hayatımın en güzel işi. Günaydın sevgilim 🌞',
 ];
 
-let data;
-try { data = JSON.parse(localStorage.getItem(KEY)) || SEED; } catch { data = SEED; }
+let data = SEED;
+let user;          // undefined = giriş durumu henüz bilinmiyor, null = giriş yok
 let view = null;   // null = ana ekran, 'd' = günlük, 'w' = haftalık, 'j' = günlük notlar
 let editing = false;
 let welcome = false;
@@ -190,9 +199,15 @@ let celebrate = false;
 let noteId = null; // düzenlenen not
 let flow = null;   // { m: mod, picks: [], sent }
 
+const cacheKey = () => KEY + ':' + user.uid;
+const remote = () => db.collection('users').doc(user.uid);
+
+// Önce telefona yazılır (çevrimdışı da çalışsın), sonra buluta; açılışta hangisi yeniyse o kullanılır.
 function save() {
-  try { localStorage.setItem(KEY, JSON.stringify(data)); }
+  data.updated = Date.now();
+  try { localStorage.setItem(cacheKey(), JSON.stringify(data)); }
   catch { alert('Kaydedilemedi! Tarayıcı depolaması kapalı olabilir.'); }
+  remote().set({ json: JSON.stringify(data) }).catch(() => alert('Buluta kaydedilemedi.'));
 }
 
 const ymd = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
@@ -248,6 +263,17 @@ function page(title, body) {
 
 function render() {
   const app = $('app');
+  if (user === undefined) return;
+  if (!user) {
+    app.innerHTML = `<form class="welcome" id="login">
+      <h1 style="flex:0;text-align:center">Merhaba Sinem 🌸</h1>
+      <input class="field" id="lUser" placeholder="Kullanıcı adı" autocomplete="username" autocapitalize="none" required>
+      <input class="field" id="lPass" type="password" placeholder="Şifre" autocomplete="current-password" required>
+      <p class="err" id="lErr"></p>
+      <button class="go">Giriş yap</button>
+    </form>`;
+    return;
+  }
   if (welcome) {
     app.innerHTML = `<div class="welcome">
       <p class="msg">${MESSAGES[dayNo(new Date()) % MESSAGES.length]}</p>
@@ -325,7 +351,8 @@ function render() {
       ${catBtn('d', '☀️', 'Günlük Görevler', leftLabel(left(todayCats())))}
       ${catBtn('w', '📅', 'Haftalık Görevler', leftLabel(left(weekCats())))}
       ${catBtn('j', '📖', 'Günlüğüm', data.notes.length + ' not')}
-    </div>`;
+    </div>
+    <button class="edit-cat" id="logout">Çıkış yap</button>`;
 }
 
 function ask({ title, name = '', emoji, sec, canDelete }, done) {
@@ -353,7 +380,8 @@ document.addEventListener('click', e => {
   const el = e.target.closest('button');
   if (!el || el.closest('dialog')) return;
 
-  if (el.dataset.view) { view = el.dataset.view; render(); scrollTo(0, 0); }
+  if (el.id === 'logout') { if (confirm('Çıkış yapılsın mı?')) auth.signOut(); }
+  else if (el.dataset.view) { view = el.dataset.view; render(); scrollTo(0, 0); }
   else if (el.id === 'back') { view = null; editing = false; noteId = null; render(); }
   else if (el.id === 'toggle') { editing = !editing; render(); }
   else if (el.id === 'closeWelcome') { welcome = false; data.seen = ymd(new Date()); save(); render(); }
@@ -437,8 +465,31 @@ document.addEventListener('visibilitychange', () => {
   render();
 });
 
-welcome = data.seen !== ymd(new Date());
-render();
+document.addEventListener('submit', e => {
+  if (e.target.id !== 'login') return;
+  e.preventDefault();
+  $('lErr').textContent = '';
+  auth.signInWithEmailAndPassword($('lUser').value.trim().toLowerCase() + DOMAIN, $('lPass').value)
+    .catch(() => $('lErr').textContent = 'Kullanıcı adı ya da şifre yanlış.');
+});
+
+function show(d) { data = d; welcome = data.seen !== ymd(new Date()); render(); }
+
+auth.onAuthStateChanged(async u => {
+  user = u;
+  view = null; editing = false; flow = null;
+  if (!u) return render();
+  let local = null;
+  // İlk girişte giriş öncesi telefondaki veri (eski anahtar) buluta taşınır.
+  try { local = JSON.parse(localStorage.getItem(cacheKey()) || localStorage.getItem(KEY)); } catch {}
+  if (local) show(local);
+  let cloud;
+  try { const d = await remote().get(); cloud = d.exists ? JSON.parse(d.data().json) : null; }
+  catch { if (!local) show(SEED); return; }   // çevrimdışı: telefondaki veriyle devam
+  const lt = local?.updated || 0, ct = cloud?.updated || 0;
+  if (cloud && (!local || ct > lt)) show(cloud);
+  else if (!cloud || lt > ct) { if (!local) show(SEED); save(); }
+});
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
 </script>
 </body>
