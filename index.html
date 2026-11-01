@@ -66,6 +66,7 @@ h1{font-size:28px;font-weight:600;margin:0;flex:1}
 .opts{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .opt{background:#fff;color:var(--text);border-radius:24px;padding:22px 10px;display:flex;flex-direction:column;align-items:center;gap:8px;font-size:17px;font-weight:600;box-shadow:0 8px 20px #0002}
 .opt span{font-size:40px}
+.opt small{font-size:13px;font-weight:400;opacity:.65}
 .busy{pointer-events:none}
 .sent{background:var(--bg);color:var(--text);justify-content:center}
 .sent h2{font-size:30px}
@@ -146,8 +147,8 @@ const MOODS = [
             ['Nasıl barışırız?', [['💐', 'Çiçek'], ['🍰', 'Tatlı'], ['🙏', 'Özür'], ['🤗', 'Sarılma']]]],
     msg: (a, b) => `😤 SİNEM KÜSTÜ: Sebep: ${lc(a)}. Barışmak için: ${lc(b)}!` },
   { emoji: '🥱', name: 'Canım Sıkılıyor', sub: 'Plan yapalım!', color: '#5a3a74', fun: 'Anıl plan yapmaya başladı! 🗺️',
-    steps: [['Ne yapalım?', [['🚶‍♀️', 'Dışarı çıkalım'], ['🎬', 'Film'], ['🍽️', 'Yemek'], ['🎁', 'Sürpriz']]],
-            ['Ne zaman?', [['⚡', 'Hemen'], ['🌙', 'Akşam'], ['📅', 'Hafta sonu']]]],
+    steps: [['Ne yapalım?', [['🚶‍♀️', 'Dışarı çıkalım'], ['🎬', 'Film'], ['🍽️', 'Yemek'], ['😈', 'Seks']]],
+            ['Ne zaman?', [['⚡', 'Hemen', 'yanıyorum'], ['🌙', 'Akşam', 'sabredebilirim😢']]]],
     msg: (a, b) => `🥱 SİNEM'İN CANI SIKILIYOR: İstediği: ${lc(a)}. Ne zaman: ${lc(b)}!` },
   { emoji: '🥺', name: 'Özledim', sub: 'Sarılmaya ihtiyacım var', color: '#9a4862', fun: 'Anıl sarılmaya geliyor! 🤗',
     steps: [['Ne kadar?', [['🥹', 'Biraz'], ['🥺', 'Çok'], ['😭', 'Dayanamıyorum']]]],
@@ -326,7 +327,7 @@ function render() {
       <div class="flow-top"><span>${picks.length + 1} / ${m.steps.length}</span><button id="closeFlow" aria-label="Kapat">✕</button></div>
       <div class="flow-emo">${m.emoji}</div>
       <h2>${q}</h2>
-      <div class="opts">${opts.map(([e, o, free]) => `<button class="opt" data-opt="${o}"${free ? ' data-free="1"' : ''}><span>${e}</span>${o}</button>`).join('')}</div>
+      <div class="opts">${opts.map(([e, o, x]) => `<button class="opt" data-opt="${o}"${x === true ? ' data-free="1"' : ''}><span>${e}</span>${o}${typeof x === 'string' ? `<small>${x}</small>` : ''}</button>`).join('')}</div>
     </div>`;
     return;
   }
