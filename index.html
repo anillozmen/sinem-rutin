@@ -49,6 +49,9 @@ h1{font-size:28px;font-weight:600;margin:0;flex:1}
 .call-t b{font:600 23px ui-serif,'New York',Georgia,serif}
 .call-t i{color:#fffa;font-size:15px}
 .phone{width:56px;height:56px;border-radius:50%;background:#34c759;display:grid;place-items:center;font-size:24px;flex:none}
+.love{display:flex;justify-content:space-between;margin-bottom:28px}
+.love button,.love span{font-size:26px;color:var(--soft);padding:0}
+.love .on{color:var(--pink)}
 .sec{font-size:13px;letter-spacing:.14em;margin:0;color:var(--muted);font-family:inherit}
 .sub{font:italic 22px ui-serif,'New York',Georgia,serif;margin:4px 0 14px}
 .moods{display:grid;grid-template-columns:1fr 1fr;gap:12px}
@@ -234,6 +237,9 @@ const todayCats = () => [...dailyCats(), ...weekCats().filter(c => c.day === tod
 const findTask = id => { for (const cat of data.cats) { const task = cat.tasks.find(x => x.id === id); if (task) return [cat, task]; } };
 const dayNo = d => Math.round(new Date(d.getFullYear(), d.getMonth(), d.getDate()) / 864e5);
 const YAY = 'Bugün harikaydın aşkım, gerisi senin zamanın 💕';
+// Tarihle saklanır; gün değişince 0 sayılır (gece sıfırlanır).
+const loveToday = () => data.love?.d === ymd(new Date()) ? data.love.n : 0;
+const loveRow = tag => `<div class="love">${Array.from({ length: 10 }, (_, i) => `<${tag} data-love="${i + 1}" class="${i < loveToday() ? 'on' : ''}">♥</${tag}>`).join('')}</div>`;
 
 function section(cat, title) {
   return `<section class="sect">
@@ -288,6 +294,8 @@ function render() {
     const all = todayCats().flatMap(c => c.tasks);
     app.innerHTML = `<header><h1>Sinem'in Günü 🌸</h1></header>
       <p class="sub">Bugün ${all.filter(isDone).length} / ${all.length} görev tamam</p>
+      <h2 class="sec">SENİ BUGÜN ${loveToday()} / 10 SEVİYOR</h2>
+      ${loveRow('span')}
       ${dailyCats().map(c => list(c, `${esc(c.emoji || '')} ${esc(c.name)}`)).join('')}
       ${weekCats().map(c => list(c, c.name + (c.day === today() ? ' · Bugün' : ''))).join('')}
       <h2 class="sec">GÜNLÜĞÜ</h2>
@@ -363,6 +371,8 @@ function render() {
       <span class="call-t"><b>Anıl'ı Ara</b><i>Karıma özel destek hattı</i></span>
       <span class="phone">📞</span>
     </a>
+    <h2 class="sec">ANIL'I BUGÜN NE KADAR SEVİYORUM?</h2>
+    ${loveRow('button')}
     <h2 class="sec">DUYGU MODLARI</h2>
     <p class="sub">Ne hissediyorsun aşkım?</p>
     <div class="moods">${MOODS.map((m, i) => `<button class="mood" data-mood="${i}" style="background:${m.color}">
@@ -406,6 +416,7 @@ document.addEventListener('click', e => {
   else if (el.id === 'toggle') { editing = !editing; render(); }
   else if (el.id === 'closeWelcome') { welcome = false; data.seen = ymd(new Date()); save(); render(); }
   else if (el.id === 'closeYay') { celebrate = false; render(); }
+  else if (el.dataset.love) { data.love = { d: ymd(new Date()), n: +el.dataset.love }; save(); render(); hearts(document.querySelector(`[data-love="${el.dataset.love}"]`)); }
   else if (el.dataset.mood) { flow = { m: MOODS[el.dataset.mood], picks: [] }; render(); }
   else if (el.id === 'closeFlow') { flow = null; render(); }
   else if (el.dataset.opt) {
