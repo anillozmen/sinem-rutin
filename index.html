@@ -253,7 +253,7 @@ function save() {
   pushSummary();
 }
 function pushSummary() {
-  if (demo || user?.uid !== SINEM_UID) return;
+  if (demo || !(viewer || user?.uid === SINEM_UID)) return;   // Sinem her kayıtta, yönetici ekranı her açılışta yazar
   const { love, loveLog, water } = data;
   SUMMARY().set({ json: JSON.stringify({ love, loveLog, water, msgs: (data.msgs || []).map(m => ({ id: m.id, seen: m.seen })) }) }).catch(() => {});
 }
@@ -350,12 +350,12 @@ async function sharedOp(fn) {
 }
 function watchShared() {
   unsubShared?.(); unsubShared = null; shared = [];
-  if (demo || !user || lite) return;
+  if (demo || !user) return;
   unsubShared = SHARED().onSnapshot(d => {
     shared = d.exists ? d.data().items : [];
     // Sinem'de yalnız ana ekran ve liste ekranı yeniden çizilir (görev animasyonu, taslak, açık pencere bozulmasın).
     if ($('dlg').open || welcome || inbox || celebrate || flow) return;
-    if (viewer || view === null || view === 'b') render();
+    if (viewer || lite || view === null || view === 'b') render();
   }, () => {});
 }
 const msgBox = draft => `<h2 class="sec">SİNEM'E MESAJ</h2>
@@ -423,6 +423,8 @@ function render() {
       ${loveWeek()}
       <h2 class="sec">BUGÜN ${waterToday()} / ${WATER} BARDAK SU İÇTİ 💧</h2><br>
       ${msgBox(draft)}
+      <h2 class="sec">BİRLİKTE YAPILACAKLAR 🧡</h2>
+      <div style="margin:10px 0 28px">${sharedBox()}</div>
       ${specialDays()}
       <button class="edit-cat" id="setPass">Şifre belirle / değiştir</button>
       <button class="edit-cat" id="logout" style="margin-top:0">Çıkış yap</button>`;
@@ -607,7 +609,7 @@ document.addEventListener('click', e => {
   else if (el.dataset.water) { const n = +el.dataset.water; data.water = { d: ymd(new Date()), n: n === waterToday() ? n - 1 : n }; save(); render(); }
   else if (el.dataset.star) { const x = (data.msgs || []).find(m => msgKey(m) === el.dataset.star); if (!x) return; x.star = !x.star; save(); render(); }
   else if (el.id === 'starNote') { const n = data.notes.find(x => x.id === noteId); n.star = !n.star; const v = $('note').value; save(); render(); $('note').value = v; }   // yazılan taslak kaybolmasın
-  else if (el.id === 'addShared') ask({ title: 'Birlikte ne yapalım? 🧡' }, (_, v) => sharedOp(items => [...items, { id: uid(), text: v.name, by: viewer ? 'Anıl' : 'Sinem', done: false }]));
+  else if (el.id === 'addShared') ask({ title: 'Birlikte ne yapalım? 🧡' }, (_, v) => sharedOp(items => [...items, { id: uid(), text: v.name, by: viewer || lite ? 'Anıl' : 'Sinem', done: false }]));
   else if (el.dataset.sh) sharedOp(items => items.map(i => i.id === el.dataset.sh ? { ...i, done: !i.done } : i));
   else if (el.id === 'clearShared') { if (confirm('Yapılanlar listeden kaldırılsın mı?')) sharedOp(items => items.filter(i => !i.done)); }
   else if (el.id === 'closeInbox') { const now = new Date().toISOString(); inbox.forEach(x => x.seen = now); inbox = null; save(); render(); }
@@ -784,7 +786,8 @@ async function loadLite() {
 
 async function loadSinem() {
   try { data = JSON.parse((await db.collection('users').doc(SINEM_UID).get()).data().json); }
-  catch { alert("Sinem'in verisi alınamadı."); }
+  catch { alert("Sinem'in verisi alınamadı."); return render(); }
+  pushSummary();
   render();
 }
 

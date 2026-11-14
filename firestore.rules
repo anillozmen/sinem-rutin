@@ -16,14 +16,14 @@ service cloud.firestore {
       allow read: if isAnil() || isLite() || isSinem();
       allow write: if isAnil() || isLite();
     }
-    // Sade ekranın gördüğü özet (kalp, su, mesaj durumu): Sinem yazar.
+    // Sade ekranın gördüğü özet (kalp, su, mesaj durumu): Sinem ve yönetici ekranı yazar.
     match /ozet/{doc} {
       allow read: if isAnil() || isLite() || isSinem();
-      allow write: if isSinem();
+      allow write: if isSinem() || isAnil();
     }
-    // Birlikte yapılacaklar listesi: Sinem ve Anıl okur, yazar.
+    // Birlikte yapılacaklar listesi: Sinem ve Anıl'ın iki hesabı okur, yazar.
     match /ortak/{doc} {
-      allow read, write: if isAnil() || isSinem();
+      allow read, write: if isAnil() || isLite() || isSinem();
     }
   }
 }
