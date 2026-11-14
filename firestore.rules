@@ -1,0 +1,18 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAnil() { return request.auth != null && request.auth.token.email == 'anil@sinem-rutin.app'; }
+    function isSinem() { return request.auth != null && request.auth.uid == 'tHNXU8bhZVM71nrXcloutAP6tiH3'; }
+
+    // Herkes yalnız kendi verisini okur/yazar; Anıl Sinem'inkini yalnız okur.
+    match /users/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+      allow read: if isAnil() && uid == 'tHNXU8bhZVM71nrXcloutAP6tiH3';
+    }
+    // Anıl'dan Sinem'e mesajlar: Anıl yazar, ikisi okur.
+    match /inbox/{doc} {
+      allow read: if isAnil() || isSinem();
+      allow write: if isAnil();
+    }
+  }
+}
