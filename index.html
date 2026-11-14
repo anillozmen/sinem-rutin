@@ -141,12 +141,11 @@ const demo = new URLSearchParams(location.search).has('demo');  // girişsiz, ö
 firebase.initializeApp(FIREBASE);
 const auth = firebase.auth(), db = firebase.firestore();
 const KEY = 'sinem-rutin-v3';
-const PHONE = '+900000000000';
 const NTFY = 'https://ntfy.sh/sinem-451965c8de30825e4a6b';
 // shortcut: Anıl'dan Sinem'e mesajlar ntfy'da ~12 saat durur; Sinem o sürede açmazsa kaybolur. Kalıcı lazım olursa Firestore kuralına Anıl yazma izni ekle.
 const NTFY_SINEM = 'https://ntfy.sh/sinem-40c9efc02362d4f7195a';
 const QUICK = ['Yoldayım 🏃', 'Tamam aşkım 💝', 'Hemen hallediyorum 💪', 'Ben de seni seviyorum ❤️'];
-const SPECIAL = [['💞 Yıldönümümüz', '2025-07-19'], ["🎂 Sinem'in doğum günü", '0000-12-25'], ["🎂 Anıl'ın doğum günü", '0000-07-17']];
+const SPECIAL = [['💞 Yıldönümümüz', '2025-07-19'], ["🎂 Sinem'in doğum günü", '12-25'], ["🎂 Anıl'ın doğum günü", '07-17']];   // depo herkese açık: doğum yılı yazılmaz
 const WATER = 8;   // günlük bardak hedefi
 const BDAY = '12-25';   // Sinem'in doğum günü (ay-gün)
 const BDAY_MSG = 'İyi ki doğdun canım aşkım! 🎂 Hayatıma girdiğin günden beri her şey daha güzel. Yeni yaşın sana senin bana verdiğin mutluluğun binlerce kat fazlasını getirsin. Seni çok seviyorum ❤️';
@@ -297,11 +296,11 @@ const streakText = () => streak() ? `🔥 ${streak()} gündür rutin tamam` : ''
 function specialDays() {
   const now = new Date(), t0 = dayNo(now);
   const rows = SPECIAL.map(([name, date]) => {
-    const [y, m, d] = date.split('-').map(Number);
+    const [d, m, y] = date.split('-').map(Number).reverse();
     let next = new Date(now.getFullYear(), m - 1, d);
     if (dayNo(next) < t0) next = new Date(now.getFullYear() + 1, m - 1, d);
     const left = dayNo(next) - t0, age = next.getFullYear() - y;
-    return `<div class="note"><small>${name} · ${age}. ${name.includes('doğum') ? 'yaş' : 'yıl'}</small>${left ? left + ' gün kaldı' : 'Bugün! 🎉'}</div>`;
+    return `<div class="note"><small>${name}${y ? ` · ${age}. yıl` : ''}</small>${left ? left + ' gün kaldı' : 'Bugün! 🎉'}</div>`;
   });
   return `<h2 class="sec">ÖZEL GÜNLER</h2><div class="notes" style="margin:10px 0 28px">
     <div class="note"><small>Sevgili olalı</small>${t0 - dayNo(new Date(SPECIAL[0][1] + 'T00:00'))} gün 💕</div>${rows.join('')}</div>`;
@@ -464,7 +463,7 @@ function render() {
   }
   view = null;
   app.innerHTML = `<header><h1>Merhaba Sinem 🌸</h1></header>
-    <a class="call" href="tel:${PHONE}">
+    <a class="call" id="call" href="${data.phone ? 'tel:' + esc(data.phone) : '#'}">
       <span class="avatar">A</span><!-- fotoğraf gelince: style="background-image:url(anil.jpg)" ve harfi sil -->
       <span class="call-t"><b>Anıl'ı Ara</b><i>Karıma özel destek hattı</i></span>
       <span class="phone">📞</span>
@@ -511,6 +510,13 @@ const sameType = cat => data.cats.filter(c => c.type === cat.type);
 const catById = id => data.cats.find(c => c.id === id);
 
 document.addEventListener('click', e => {
+  // Numara kodda durmaz (depo herkese açık); ilk dokunuşta bir kez sorulur, Sinem'in verisine kaydedilir.
+  if (e.target.closest('#call') && !data.phone) {
+    e.preventDefault();
+    const p = (prompt("Anıl'ın telefon numarası (bir kez sorulur):") || '').replace(/[^\d+]/g, '');
+    if (p) { data.phone = p; save(); render(); }
+    return;
+  }
   const el = e.target.closest('button');
   if (!el || el.closest('dialog')) return;
 
