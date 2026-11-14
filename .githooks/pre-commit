@@ -1,0 +1,15 @@
+#!/bin/sh
+# Kişisel veri (telefon, TC, IBAN, doğum tarihi) depoya girmesin (Kurallar.md).
+# Yalnız eklenen satırlara bakar. Yanlış alarmsa Anıl'a sor; onaylarsa: git commit --no-verify
+B='(^|[^0-9A-Za-z])'; E='([^0-9A-Za-z]|$)'
+PAT="$B(\\+90|0)[ -]?5[0-9]{2}[ -]?[0-9]{3}[ -]?[0-9]{2}[ -]?[0-9]{2}$E"                              # cep telefonu
+PAT="$PAT|$B[1-9][0-9]{10}$E"                                                                          # TC kimlik
+PAT="$PAT|${B}TR[0-9]{2}( ?[0-9]{4}){5} ?[0-9]{2}$E"                                                   # IBAN
+PAT="$PAT|$B(19[3-9][0-9]|200[0-9]|201[0-5])-[01][0-9]-[0-3][0-9]$E"                                   # doğum tarihi yyyy-aa-gg
+PAT="$PAT|$B[0-3]?[0-9][./][01]?[0-9][./](19[3-9][0-9]|200[0-9]|201[0-5])$E"                          # doğum tarihi gg.aa.yyyy
+hits=$(git diff --cached -U0 --no-color --diff-filter=AM | grep '^+' | grep -v '^+++' | grep -nE "$PAT" | cut -c1-160)
+[ -z "$hits" ] && exit 0
+echo "DURDURULDU: eklenen satırlarda kişisel veri olabilir (telefon, TC, IBAN, doğum tarihi):" >&2
+echo "$hits" >&2
+echo "Veriyi çıkar. Yanlış alarmsa Anıl'a sor; onaylarsa: git commit --no-verify" >&2
+exit 1
