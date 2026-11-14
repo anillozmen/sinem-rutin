@@ -134,11 +134,13 @@ input{-webkit-user-select:text;user-select:text}
 <script>
 const FIREBASE = {"apiKey":"AIzaSyAKJ0thuvqp0Pw7SlIrKw5FUGgAptJwybE","authDomain":"sinem-rutin-6078.firebaseapp.com","projectId":"sinem-rutin-6078","appId":"1:678898898593:web:a006c17b948df36901c2e0"};
 const DOMAIN = '@sinem-rutin.app';   // Firebase e-posta ister; kullanıcı adı bu uzantıyla e-postaya çevrilir
-// anil hesabı Sinem'in verisini sadece görür (Firestore kuralı da yalnızca okumaya izin verir).
-const VIEWER = 'anil' + DOMAIN, SINEM_UID = 'tHNXU8bhZVM71nrXcloutAP6tiH3';
-let viewer = false;   // anil hesabı: yönetici ekranı, Sinem'in her şeyini görür
+// admin hesabı Sinem'in verisini sadece görür (Firestore kuralı da yalnızca okumaya izin verir).
+const VIEWER = 'admin' + DOMAIN, SINEM_UID = 'tHNXU8bhZVM71nrXcloutAP6tiH3';
+let viewer = false;   // admin hesabı: yönetici ekranı, Sinem'in her şeyini görür
 // anilim hesabı: sade ekran (kalp, su, mesaj, özel günler). Şifre yazılmaz; giriş anahtarı bağlantıdadır (?k=), kodda durmaz.
 const LITE = 'anilim' + DOMAIN, LINK_KEY = new URLSearchParams(location.search).get('k');
+// ?a= yönetici hesabının tek kullanımlık ilk giriş anahtarı; Anıl girip "Şifre belirle" deyince geçersiz olur.
+const ADMIN_KEY = new URLSearchParams(location.search).get('a');
 let lite = false;
 // iOS ana ekrana eklerken manifest varsa anahtarsız adresi kaydeder; anahtarlı bağlantıda manifest kaldırılır.
 if (LINK_KEY) document.querySelector('link[rel=manifest]')?.remove();
@@ -446,7 +448,8 @@ function render() {
       ${weekCats().map(c => list(c, c.name + (c.day === today() ? ' · Bugün' : ''))).join('')}
       <h2 class="sec">GÜNLÜĞÜ</h2>
       <div class="notes">${newestFirst(data.notes).map(x => `<div class="note"><small>${fmt(x.date)}</small>${esc(x.text)}</div>`).join('') || '<div class="empty">Henüz not yok</div>'}</div>
-      <button class="edit-cat" id="logout">Çıkış yap</button>`;
+      <button class="edit-cat" id="setPass">Şifre belirle / değiştir</button>
+      <button class="edit-cat" id="logout" style="margin-top:0">Çıkış yap</button>`;
     return;
   }
   if (welcome) {
@@ -586,6 +589,14 @@ document.addEventListener('click', e => {
   if (!el || el.closest('dialog')) return;
 
   if (el.id === 'logout') { if (confirm('Çıkış yapılsın mı?')) auth.signOut(); }
+  else if (el.id === 'setPass') {
+    const p = prompt('Yeni şifre (en az 6 karakter):');
+    if (!p) return;
+    if (p.length < 6) return alert('Şifre en az 6 karakter olmalı.');
+    auth.currentUser.updatePassword(p)
+      .then(() => alert('Şifre kaydedildi. Kullanıcı adın: admin'))
+      .catch(() => alert('Şifre değiştirilemedi. Çıkış yapıp yeniden gir, sonra tekrar dene.'));
+  }
   else if (el.dataset.view) { view = el.dataset.view; render(); scrollTo(0, 0); }
   else if (el.id === 'back') { view = null; editing = false; noteId = null; render(); }
   else if (el.id === 'toggle') { editing = !editing; render(); }
@@ -809,6 +820,7 @@ auth.onAuthStateChanged(async u => {
   checkMsgs();
 });
 if (LINK_KEY && !demo) auth.signInWithEmailAndPassword(LITE, LINK_KEY).catch(() => {});
+if (ADMIN_KEY && !demo) auth.signInWithEmailAndPassword(VIEWER, ADMIN_KEY).catch(() => {});
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
 </script>
 </body>

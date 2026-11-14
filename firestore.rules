@@ -1,7 +1,7 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function isAnil() { return request.auth != null && request.auth.token.email == 'anil@sinem-rutin.app'; }
+    function isAnil() { return request.auth != null && request.auth.token.email == 'admin@sinem-rutin.app'; }
     // Sade ekran hesabı: yalnız özeti okur, mesaj yazar. Günlüğe ve görevlere erişemez.
     function isLite() { return request.auth != null && request.auth.token.email == 'anilim@sinem-rutin.app'; }
     function isSinem() { return request.auth != null && request.auth.uid == 'tHNXU8bhZVM71nrXcloutAP6tiH3'; }
