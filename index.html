@@ -223,7 +223,10 @@ let celebrate = false;
 let noteId = null; // düzenlenen not
 let flow = null;   // { m: mod, picks: [], sent }
 let inbox = null;  // Sinem'e gelen, henüz kapatılmamış Anıl mesajları
-let sentMsg = '';  // Anıl ekranında son gönderilen mesaj
+// shortcut: gönderilenler listesi yalnız Anıl'ın bu cihazında durur; başka cihazda boş görünür.
+const SENT_KEY = 'sinem-rutin-sent';
+const sentList = () => { try { return JSON.parse(localStorage.getItem(SENT_KEY)) || []; } catch { return []; } };
+const INBOX = () => db.collection('inbox').doc('sinem');   // Anıl yazar, Sinem okur (Firestore kuralı gerekir)
 let loaded = false;   // Sinem'in verisi yerleşti mi (mesajlar yanlış veriye yazılmasın)
 let checking = false, sending = false;
 const msgKey = m => m.id || m.date;   // eski mesajlarda id yok
@@ -377,7 +380,10 @@ function render() {
       <div class="quick">${QUICK.map(q => `<button class="task" data-quick="${q}">${q}</button>`).join('')}</div>
       <textarea id="anilMsg" placeholder="Sinem'e bir not bırak…">${esc(draft)}</textarea>
       <div class="actions"><button class="ok" id="sendMsg">Gönder</button></div>
-      ${sentMsg ? `<p class="sub">Gönderildi: ${esc(sentMsg)} ✓</p>` : ''}
+      <div class="notes" style="margin:14px 0 22px">${sentList().slice(-3).reverse().map(m => {
+        const got = (data.msgs || []).find(x => x.id === m.id);
+        return `<div class="note"><small>${got?.seen ? 'Gördü ✓✓' : got ? 'Ulaştı ✓' : 'Henüz açmadı'} · ${fmt(m.date)}</small>${esc(m.text)}</div>`;
+      }).join('')}</div>
       <p class="sub">${streakText()}</p>
       ${specialDays()}
       <h2 class="sec">BUBBLE 🐶</h2>
@@ -526,11 +532,11 @@ document.addEventListener('click', e => {
   else if (el.id === 'toggle') { editing = !editing; render(); }
   else if (el.id === 'closeWelcome') { welcome = false; data.seen = ymd(new Date()); save(); render(); }
   else if (el.id === 'closeYay') { celebrate = false; render(); }
-  else if (el.dataset.love) { data.love = { d: ymd(new Date()), n: +el.dataset.love }; data.loveLog = Object.fromEntries(Object.entries({ ...data.loveLog, [data.love.d]: data.love.n }).slice(-14)); save(); render(); fetch(NTFY, { method: 'POST', body: `Sinem seni bugün ${el.dataset.love} / 10 seviyor ❤️` }).catch(() => {}); hearts(document.querySelector(`[data-love="${el.dataset.love}"]`)); }
+  else if (el.dataset.love) { data.love = { d: ymd(new Date()), n: +el.dataset.love }; data.loveLog = Object.fromEntries(Object.entries({ ...data.loveLog, [data.love.d]: data.love.n }).slice(-14)); save(); render(); clearTimeout(loveTimer); loveTimer = setTimeout(sendLove, 4000); hearts(document.querySelector(`[data-love="${el.dataset.love}"]`)); }
   else if (el.dataset.water) { const n = +el.dataset.water; data.water = { d: ymd(new Date()), n: n === waterToday() ? n - 1 : n }; save(); render(); }
   else if (el.dataset.star) { const x = (data.msgs || []).find(m => msgKey(m) === el.dataset.star); if (!x) return; x.star = !x.star; save(); render(); }
   else if (el.id === 'starNote') { const n = data.notes.find(x => x.id === noteId); n.star = !n.star; const v = $('note').value; save(); render(); $('note').value = v; }   // yazılan taslak kaybolmasın
-  else if (el.id === 'closeInbox') { inbox = null; render(); }
+  else if (el.id === 'closeInbox') { const now = new Date().toISOString(); inbox.forEach(x => x.seen = now); inbox = null; save(); render(); }
   else if (el.dataset.quick) sendToSinem(el.dataset.quick);
   else if (el.id === 'sendMsg') { const v = $('anilMsg').value.trim(); if (v) sendToSinem(v, true); }
   else if (el.dataset.bubble) {
@@ -598,6 +604,14 @@ document.addEventListener('click', e => {
   }
 });
 
+// Kalplere art arda basılınca tek bildirim gitsin diye beklenir; uygulama kapanırsa hemen gönderilir.
+let loveTimer = 0;
+function sendLove() {
+  if (!loveTimer) return;
+  clearTimeout(loveTimer); loveTimer = 0;
+  fetch(NTFY, { method: 'POST', body: `Sinem seni bugün ${loveToday()} / 10 seviyor ❤️`, keepalive: true }).catch(() => {});
+}
+
 async function pick(o) {
   const f = flow;
   f.picks.push(o);
@@ -615,6 +629,7 @@ async function pick(o) {
 // Uygulama tekrar açıldığında listeyi tazele; o günün ilk açılışıysa karşılamayı göster.
 // Günlük notlar ekranı yazılan taslak kaybolmasın diye yeniden çizilmez.
 document.addEventListener('visibilitychange', () => {
+  if (document.hidden) sendLove();
   if (!document.hidden && viewer) return loadSinem();
   if (!document.hidden) checkMsgs();
   if (document.hidden || $('dlg').open || view === 'j') return;
@@ -633,11 +648,19 @@ document.addEventListener('submit', e => {
 async function sendToSinem(text, typed) {
   if (sending) return;   // çift dokunuş iki mesaj göndermesin
   sending = true;
+  const m = { id: uid(), text, date: new Date().toISOString() };
   try {
-    // başlık header'da olmaz: Türkçe harf/emoji fetch'i patlatır
-    const r = await fetch(`${NTFY_SINEM}?title=${encodeURIComponent("Anıl'dan 💌")}`, { method: 'POST', body: text });
-    if (!r.ok) throw r;
-    sentMsg = text;
+    try {
+      // Kalıcı yol. source:'server' çevrimdışıyken beklemek yerine hata versin diye.
+      const d = await INBOX().get({ source: 'server' });
+      await INBOX().set({ msgs: [...(d.exists ? d.data().msgs : []), m].slice(-30) });
+    } catch {
+      // Firestore kuralı yoksa ntfy (12 saat saklar). Başlık header'da olmaz: Türkçe harf/emoji fetch'i patlatır.
+      const r = await fetch(`${NTFY_SINEM}?title=${encodeURIComponent("Anıl'dan 💌")}`, { method: 'POST', body: text });
+      if (!r.ok) throw r;
+      m.id = (await r.json()).id;
+    }
+    try { localStorage.setItem(SENT_KEY, JSON.stringify([...sentList(), m].slice(-10))); } catch {}
     if (typed && $('anilMsg')) $('anilMsg').value = '';
     render();
   } catch { alert('Gönderilemedi, internet bağlantını kontrol et.'); }
@@ -649,14 +672,27 @@ async function checkMsgs() {
   if (demo || viewer || !user || !loaded || checking) return;
   checking = true;
   try {
-    const r = await fetch(`${NTFY_SINEM}/json?poll=1&since=${data.msgSince || '12h'}`);
+    const got = [];
+    let since = data.msgSince, fsSince = data.fsSince || '';
+    try {
+      const r = await fetch(`${NTFY_SINEM}/json?poll=1&since=${data.msgSince || '12h'}`);
+      const lines = (await r.text()).split('\n').filter(Boolean).map(l => JSON.parse(l)).filter(m => m.event === 'message');
+      got.push(...lines.map(m => ({ id: m.id, text: m.message, date: new Date(m.time * 1000).toISOString() })));
+      if (lines.length) since = lines.at(-1).id;
+    } catch {}
+    try {
+      // Kural eklenmediyse izin hatası verir, sessizce geçilir. Eskiler tarihle elenir (Sinem'de silinmiş olanlar geri gelmesin).
+      const d = await INBOX().get();
+      const ms = (d.exists ? d.data().msgs : []).filter(m => m.date > fsSince);
+      got.push(...ms.map(m => ({ id: m.id, text: m.text, date: m.date })));
+      if (ms.length) fsSince = ms.at(-1).date;
+    } catch {}
     const have = new Set((data.msgs || []).map(m => m.id));
-    const got = (await r.text()).split('\n').filter(Boolean).map(l => JSON.parse(l)).filter(m => m.event === 'message' && !have.has(m.id));
-    if (!got.length) return;
-    const fresh = got.map(m => ({ id: m.id, text: m.message, date: new Date(m.time * 1000).toISOString() }));
+    const fresh = got.filter(m => !have.has(m.id) && have.add(m.id)).sort((a, b) => a.date.localeCompare(b.date));
+    if (!fresh.length) return;
     const all = [...(data.msgs || []), ...fresh], recent = all.filter(x => !x.star).slice(-20);
     data.msgs = all.filter(x => x.star || recent.includes(x));   // anı yapılanlar silinmez
-    data.msgSince = got.at(-1).id;
+    data.msgSince = since; data.fsSince = fsSince;
     save();
     inbox = [...(inbox || []), ...fresh];
     if (!$('dlg').open && view !== 'j') render();   // günlük taslağı silinmesin
