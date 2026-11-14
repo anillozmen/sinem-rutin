@@ -52,6 +52,10 @@ h1{font-size:28px;font-weight:600;margin:0;flex:1}
 .love{display:flex;justify-content:space-between;margin-bottom:28px}
 .love button,.love span{font-size:26px;color:var(--soft);padding:0}
 .love .on{color:var(--pink)}
+.week{display:flex;justify-content:space-between;margin:-14px 0 28px;text-align:center;font-size:17px}
+.week small{display:block;color:var(--muted);font-size:12px}
+.quick{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+.quick .task{font-size:15px}
 .sec{font-size:13px;letter-spacing:.14em;margin:0;color:var(--muted);font-family:inherit}
 .sub{font:italic 22px ui-serif,'New York',Georgia,serif;margin:4px 0 14px}
 .moods{display:grid;grid-template-columns:1fr 1fr;gap:12px}
@@ -134,6 +138,11 @@ const auth = firebase.auth(), db = firebase.firestore();
 const KEY = 'sinem-rutin-v3';
 const PHONE = '+900000000000';
 const NTFY = 'https://ntfy.sh/sinem-451965c8de30825e4a6b';
+// shortcut: Anıl'dan Sinem'e mesajlar ntfy'da ~12 saat durur; Sinem o sürede açmazsa kaybolur. Kalıcı lazım olursa Firestore kuralına Anıl yazma izni ekle.
+const NTFY_SINEM = 'https://ntfy.sh/sinem-40c9efc02362d4f7195a';
+const QUICK = ['Yoldayım 🏃', 'Tamam aşkım 💝', 'Hemen hallediyorum 💪', 'Ben de seni seviyorum ❤️'];
+const SPECIAL = [['💞 Yıldönümümüz', '2025-07-19'], ["🎂 Sinem'in doğum günü", '0000-12-25'], ["🎂 Anıl'ın doğum günü", '0000-07-17']];
+const BUBBLE = [['mama', '🥣 Mama alındı'], ['banyo', '🛁 Banyo / tıraş']];
 const lc = s => s.toLocaleLowerCase('tr');
 // steps: [soru, [[emoji, seçenek], ...]]; msg seçimleri sırayla alır.
 const MOODS = [
@@ -206,6 +215,8 @@ let welcome = false;
 let celebrate = false;
 let noteId = null; // düzenlenen not
 let flow = null;   // { m: mod, picks: [], sent }
+let inbox = null;  // Sinem'e gelen, henüz kapatılmamış Anıl mesajları
+let sentMsg = '';  // Anıl ekranında son gönderilen mesaj
 
 const cacheKey = () => KEY + ':' + user.uid;
 const remote = () => db.collection('users').doc(user.uid);
@@ -240,6 +251,45 @@ const YAY = 'Bugün harikaydın aşkım, gerisi senin zamanın 💕';
 // Tarihle saklanır; gün değişince 0 sayılır (gece sıfırlanır).
 const loveToday = () => data.love?.d === ymd(new Date()) ? data.love.n : 0;
 const loveRow = tag => `<div class="love">${Array.from({ length: 10 }, (_, i) => `<${tag} data-love="${i + 1}" class="${i < loveToday() ? 'on' : ''}">♥</${tag}>`).join('')}</div>`;
+
+const DAYS_SHORT = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
+const daysAgo = d => dayNo(new Date()) - dayNo(new Date(d + 'T00:00'));
+// Bugün bittiyse bugünden, bitmediyse dünden geriye kesintisiz biten gün sayısı.
+function streak() {
+  const set = new Set(data.days || []), d = new Date();
+  if (!set.has(ymd(d))) d.setDate(d.getDate() - 1);
+  let n = 0;
+  while (set.has(ymd(d))) { n++; d.setDate(d.getDate() - 1); }
+  return n;
+}
+// Bugünün bütün görevleri bittiyse günü kaydeder, geri alınınca siler.
+function markDay() {
+  const d = ymd(new Date());
+  data.days = (data.days || []).filter(x => x !== d).slice(-60);
+  if (!left(todayCats())) data.days.push(d);
+}
+const streakText = () => streak() ? `🔥 ${streak()} gündür rutin tamam` : '';
+function specialDays() {
+  const now = new Date(), t0 = dayNo(now);
+  const rows = SPECIAL.map(([name, date]) => {
+    const [y, m, d] = date.split('-').map(Number);
+    let next = new Date(now.getFullYear(), m - 1, d);
+    if (dayNo(next) < t0) next = new Date(now.getFullYear() + 1, m - 1, d);
+    const left = dayNo(next) - t0, age = next.getFullYear() - y;
+    return `<div class="note"><small>${name} · ${age}. yıl</small>${left ? left + ' gün kaldı' : 'Bugün! 🎉'}</div>`;
+  });
+  return `<h2 class="sec">ÖZEL GÜNLER</h2><div class="notes" style="margin:10px 0 28px">
+    <div class="note"><small>Sevgili olalı</small>${t0 - dayNo(new Date(SPECIAL[0][1] + 'T00:00'))} gün 💕</div>${rows.join('')}</div>`;
+}
+const bubbleLabel = k => { const d = data.bubble?.[k]; return d ? (daysAgo(d) ? daysAgo(d) + ' gün önce' : 'bugün') : 'henüz yok'; };
+function loveWeek() {
+  const out = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(); d.setDate(d.getDate() - i);
+    out.push(`<span><small>${DAYS_SHORT[(d.getDay() + 6) % 7]}</small>${data.loveLog?.[ymd(d)] ?? (data.love?.d === ymd(d) ? data.love.n : '–')}</span>`);
+  }
+  return `<div class="week">${out.join('')}</div>`;
+}
 
 function section(cat, title) {
   return `<section class="sect">
@@ -296,6 +346,17 @@ function render() {
       <p class="sub">Bugün ${all.filter(isDone).length} / ${all.length} görev tamam</p>
       <h2 class="sec">SENİ BUGÜN ${loveToday()} / 10 SEVİYOR</h2>
       ${loveRow('span')}
+      ${loveWeek()}
+      <h2 class="sec">SİNEM'E MESAJ</h2>
+      ${data.lastMood ? `<div class="note" style="margin-top:10px"><small>Son isteği · ${fmt(data.lastMood.date)}</small>${esc(data.lastMood.text)}</div>` : ''}
+      <div class="quick">${QUICK.map(q => `<button class="task" data-quick="${q}">${q}</button>`).join('')}</div>
+      <textarea id="anilMsg" placeholder="Sinem'e bir not bırak…"></textarea>
+      <div class="actions"><button class="ok" id="sendMsg">Gönder</button></div>
+      ${sentMsg ? `<p class="sub">Gönderildi: ${esc(sentMsg)} ✓</p>` : ''}
+      <p class="sub">${streakText()}</p>
+      ${specialDays()}
+      <h2 class="sec">BUBBLE 🐶</h2>
+      <div class="notes" style="margin:10px 0 28px">${BUBBLE.map(([k, n]) => `<div class="note"><small>${n}</small>${bubbleLabel(k)}</div>`).join('')}</div>
       ${dailyCats().map(c => list(c, `${esc(c.emoji || '')} ${esc(c.name)}`)).join('')}
       ${weekCats().map(c => list(c, c.name + (c.day === today() ? ' · Bugün' : ''))).join('')}
       <h2 class="sec">GÜNLÜĞÜ</h2>
@@ -307,6 +368,15 @@ function render() {
     app.innerHTML = `<div class="welcome">
       <p class="msg">${MESSAGES[dayNo(new Date()) % MESSAGES.length]}</p>
       <button class="go" id="closeWelcome">Ana sayfaya geç ›</button>
+    </div>`;
+    return;
+  }
+  if (inbox) {
+    app.innerHTML = `<div class="flow sent">
+      <div class="flow-emo">💌</div>
+      <h2>Anıl'dan mesaj var</h2>
+      ${inbox.map(x => `<div class="note"><small>${fmt(x.date)}</small>${esc(x.text)}</div>`).join('')}
+      <button class="black" id="closeInbox">Tamam</button>
     </div>`;
     return;
   }
@@ -371,6 +441,7 @@ function render() {
       <span class="call-t"><b>Anıl'ı Ara</b><i>Karıma özel destek hattı</i></span>
       <span class="phone">📞</span>
     </a>
+    ${data.msgs?.length ? `<div class="note" style="margin:-12px 0 28px"><small>💌 Anıl'dan · ${fmt(data.msgs.at(-1).date)}</small>${esc(data.msgs.at(-1).text)}</div>` : ''}
     <h2 class="sec">ANIL'I BUGÜN NE KADAR SEVİYORUM?</h2>
     ${loveRow('button')}
     <h2 class="sec">DUYGU MODLARI</h2>
@@ -378,10 +449,13 @@ function render() {
     <div class="moods">${MOODS.map((m, i) => `<button class="mood" data-mood="${i}" style="background:${m.color}">
       <span class="emo">${m.emoji}</span><b>${m.name}</b><small>${m.sub}</small></button>`).join('')}</div>
     <div class="grid big">
-      ${catBtn('d', '☀️', 'Günlük Görevler', leftLabel(left(todayCats())))}
+      ${catBtn('d', '☀️', 'Günlük Görevler', leftLabel(left(todayCats())) + (streak() ? '<br>' + streakText() : ''))}
       ${catBtn('w', '📅', 'Haftalık Görevler', leftLabel(left(weekCats())))}
       ${catBtn('j', '📖', 'Günlüğüm', data.notes.length + ' not')}
     </div>
+    <h2 class="sec" style="margin-top:28px">BUBBLE 🐶</h2>
+    <div class="tasks quick">${BUBBLE.map(([k, n]) => `<button class="task" data-bubble="${k}">${n} · ${bubbleLabel(k)}</button>`).join('')}</div>
+    <div style="margin-top:28px">${specialDays()}</div>
     <button class="edit-cat" id="logout">Çıkış yap</button>`;
 }
 
@@ -416,7 +490,15 @@ document.addEventListener('click', e => {
   else if (el.id === 'toggle') { editing = !editing; render(); }
   else if (el.id === 'closeWelcome') { welcome = false; data.seen = ymd(new Date()); save(); render(); }
   else if (el.id === 'closeYay') { celebrate = false; render(); }
-  else if (el.dataset.love) { data.love = { d: ymd(new Date()), n: +el.dataset.love }; save(); render(); fetch(NTFY, { method: 'POST', body: `Sinem seni bugün ${el.dataset.love} / 10 seviyor ❤️` }).catch(() => {}); hearts(document.querySelector(`[data-love="${el.dataset.love}"]`)); }
+  else if (el.dataset.love) { data.love = { d: ymd(new Date()), n: +el.dataset.love }; data.loveLog = Object.fromEntries(Object.entries({ ...data.loveLog, [data.love.d]: data.love.n }).slice(-14)); save(); render(); fetch(NTFY, { method: 'POST', body: `Sinem seni bugün ${el.dataset.love} / 10 seviyor ❤️` }).catch(() => {}); hearts(document.querySelector(`[data-love="${el.dataset.love}"]`)); }
+  else if (el.id === 'closeInbox') { inbox = null; render(); }
+  else if (el.dataset.quick) sendToSinem(el.dataset.quick);
+  else if (el.id === 'sendMsg') { const v = $('anilMsg').value.trim(); if (v) sendToSinem(v); }
+  else if (el.dataset.bubble) {
+    const [k, n] = BUBBLE.find(b => b[0] === el.dataset.bubble);
+    if (!confirm(`"${n}" bugün olarak işaretlensin mi?`)) return;
+    data.bubble = { ...data.bubble, [k]: ymd(new Date()) }; save(); render();
+  }
   else if (el.dataset.mood) { flow = { m: MOODS[el.dataset.mood], picks: [] }; render(); }
   else if (el.id === 'closeFlow') { flow = null; render(); }
   else if (el.dataset.opt) {
@@ -440,7 +522,7 @@ document.addEventListener('click', e => {
     const cat = catById(el.dataset.add);
     ask({ title: 'Yeni görev', sec: { cats: sameType(cat), value: cat.id } }, (_, v) => { catById(v.sec).tasks.push(t(v.name, cat.type)); save(); render(); });
   }
-  else if (el.dataset.undo) { findTask(el.dataset.undo)[1].done = null; save(); render(); }
+  else if (el.dataset.undo) { findTask(el.dataset.undo)[1].done = null; markDay(); save(); render(); }
   else if (el.dataset.task) {
     const [cat, task] = findTask(el.dataset.task);
     if (editing) {
@@ -454,6 +536,7 @@ document.addEventListener('click', e => {
       });
     } else {
       task.done = periodKey(task.type);
+      markDay();
       save();
       const yay = todayCats().includes(cat) && !left(todayCats());
       el.classList.add('pop');
@@ -484,6 +567,7 @@ async function pick(o) {
       const r = await fetch(NTFY, { method: 'POST', body: f.m.msg(...f.picks) });
       if (!r.ok) throw r;
       f.sent = true;
+      data.lastMood = { text: f.m.msg(...f.picks), date: new Date().toISOString() }; save();
     } catch { alert('Gönderilemedi, internet bağlantını kontrol et.'); f.picks.pop(); }
   }
   if (flow === f) render();
@@ -493,6 +577,7 @@ async function pick(o) {
 // Günlük notlar ekranı yazılan taslak kaybolmasın diye yeniden çizilmez.
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden && viewer) return loadSinem();
+  if (!document.hidden) checkMsgs();
   if (document.hidden || $('dlg').open || view === 'j') return;
   if (data.seen !== ymd(new Date())) { welcome = true; flow = null; }
   render();
@@ -505,6 +590,30 @@ document.addEventListener('submit', e => {
   auth.signInWithEmailAndPassword($('lUser').value.trim().toLowerCase() + DOMAIN, $('lPass').value)
     .catch(() => $('lErr').textContent = 'Kullanıcı adı ya da şifre yanlış.');
 });
+
+async function sendToSinem(text) {
+  try {
+    const r = await fetch(NTFY_SINEM, { method: 'POST', body: text, headers: { Title: "Anıl'dan 💌" } });
+    if (!r.ok) throw r;
+    sentMsg = text; render();
+  } catch { alert('Gönderilemedi, internet bağlantını kontrol et.'); }
+}
+
+// Anıl'ın yeni mesajlarını çeker, Sinem'in verisine kalıcı yazar ve pop-up'ta gösterir.
+async function checkMsgs() {
+  if (demo || viewer || !user) return;
+  try {
+    const r = await fetch(`${NTFY_SINEM}/json?poll=1&since=${data.msgSince || '12h'}`);
+    const got = (await r.text()).split('\n').filter(Boolean).map(l => JSON.parse(l)).filter(m => m.event === 'message');
+    if (!got.length) return;
+    const fresh = got.map(m => ({ text: m.message, date: new Date(m.time * 1000).toISOString() }));
+    data.msgs = [...(data.msgs || []), ...fresh].slice(-20);
+    data.msgSince = got.at(-1).id;
+    save();
+    inbox = fresh;
+    if (!$('dlg').open && view !== 'j') render();   // günlük taslağı silinmesin
+  } catch {}
+}
 
 async function loadSinem() {
   try { data = JSON.parse((await db.collection('users').doc(SINEM_UID).get()).data().json); }
@@ -538,6 +647,7 @@ auth.onAuthStateChanged(async u => {
   const lt = local?.updated || 0, ct = cloud?.updated || 0;
   if (cloud && (!local || ct > lt)) show(cloud);
   else if (!cloud || lt > ct) { if (!local) show(SEED); save(); }
+  checkMsgs();
 });
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
 </script>
