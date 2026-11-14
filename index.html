@@ -416,7 +416,7 @@ document.addEventListener('click', e => {
   else if (el.id === 'toggle') { editing = !editing; render(); }
   else if (el.id === 'closeWelcome') { welcome = false; data.seen = ymd(new Date()); save(); render(); }
   else if (el.id === 'closeYay') { celebrate = false; render(); }
-  else if (el.dataset.love) { data.love = { d: ymd(new Date()), n: +el.dataset.love }; save(); render(); hearts(document.querySelector(`[data-love="${el.dataset.love}"]`)); }
+  else if (el.dataset.love) { data.love = { d: ymd(new Date()), n: +el.dataset.love }; save(); render(); fetch(NTFY, { method: 'POST', body: `Sinem seni bugün ${el.dataset.love} / 10 seviyor ❤️` }).catch(() => {}); hearts(document.querySelector(`[data-love="${el.dataset.love}"]`)); }
   else if (el.dataset.mood) { flow = { m: MOODS[el.dataset.mood], picks: [] }; render(); }
   else if (el.id === 'closeFlow') { flow = null; render(); }
   else if (el.dataset.opt) {
