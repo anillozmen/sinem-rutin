@@ -136,7 +136,12 @@ const FIREBASE = {"apiKey":"AIzaSyAKJ0thuvqp0Pw7SlIrKw5FUGgAptJwybE","authDomain
 const DOMAIN = '@sinem-rutin.app';   // Firebase e-posta ister; kullanıcı adı bu uzantıyla e-postaya çevrilir
 // anil hesabı Sinem'in verisini sadece görür (Firestore kuralı da yalnızca okumaya izin verir).
 const VIEWER = 'anil' + DOMAIN, SINEM_UID = 'tHNXU8bhZVM71nrXcloutAP6tiH3';
-let viewer = false;
+let viewer = false;   // anil hesabı: yönetici ekranı, Sinem'in her şeyini görür
+// anilim hesabı: sade ekran (kalp, su, mesaj, özel günler). Şifre yazılmaz; giriş anahtarı bağlantıdadır (?k=), kodda durmaz.
+const LITE = 'anilim' + DOMAIN, LINK_KEY = new URLSearchParams(location.search).get('k');
+let lite = false;
+// iOS ana ekrana eklerken manifest varsa anahtarsız adresi kaydeder; anahtarlı bağlantıda manifest kaldırılır.
+if (LINK_KEY) document.querySelector('link[rel=manifest]')?.remove();
 const demo = new URLSearchParams(location.search).has('demo');  // girişsiz, örnek verili, buluta yazmayan mod
 firebase.initializeApp(FIREBASE);
 const auth = firebase.auth(), db = firebase.firestore();
@@ -226,6 +231,9 @@ let inbox = null;  // Sinem'e gelen, henüz kapatılmamış Anıl mesajları
 // shortcut: gönderilenler listesi yalnız Anıl'ın bu cihazında durur; başka cihazda boş görünür.
 const SENT_KEY = 'sinem-rutin-sent';
 const sentList = () => { try { return JSON.parse(localStorage.getItem(SENT_KEY)) || []; } catch { return []; } };
+const SUMMARY = () => db.collection('ozet').doc('sinem');   // sade ekranın okuduğu özet; Sinem yazar
+const SHARED = () => db.collection('ortak').doc('liste');   // birlikte yapılacaklar; Sinem ve Anıl yazar
+let shared = [], unsubShared = null;
 const INBOX = () => db.collection('inbox').doc('sinem');   // Anıl yazar, Sinem okur (Firestore kuralı gerekir)
 let loaded = false;   // Sinem'in verisi yerleşti mi (mesajlar yanlış veriye yazılmasın)
 let checking = false, sending = false;
@@ -240,6 +248,12 @@ function save() {
   try { localStorage.setItem(cacheKey(), JSON.stringify(data)); }
   catch { alert('Kaydedilemedi! Tarayıcı depolaması kapalı olabilir.'); }
   if (!demo) remote().set({ json: JSON.stringify(data) }).catch(() => alert('Buluta kaydedilemedi.'));
+  pushSummary();
+}
+function pushSummary() {
+  if (demo || user?.uid !== SINEM_UID) return;
+  const { love, loveLog, water } = data;
+  SUMMARY().set({ json: JSON.stringify({ love, loveLog, water, msgs: (data.msgs || []).map(m => ({ id: m.id, seen: m.seen })) }) }).catch(() => {});
 }
 
 const ymd = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
@@ -318,6 +332,40 @@ function loveWeek() {
   return `<div class="week">${out.join('')}</div>`;
 }
 
+const sharedLeft = () => shared.filter(x => !x.done).length;
+function sharedBox() {
+  return `<div class="tasks">
+    ${shared.filter(x => !x.done).map(x => `<button class="task" data-sh="${x.id}">${esc(x.text)}</button>`).join('')}
+    ${shared.filter(x => x.done).map(x => `<button class="task off" data-sh="${x.id}">✅ ${esc(x.text)}</button>`).join('')}
+    <button class="task add" id="addShared">+ Ekle</button>
+  </div>${shared.some(x => x.done) ? '<button class="edit-cat" id="clearShared">Yapılanları listeden kaldır</button>' : ''}`;
+}
+// Liste ikimizin; aynı anda yazılırsa biri diğerini ezmesin diye işlem (transaction) ile değişir.
+async function sharedOp(fn) {
+  if (demo) { shared = fn(shared); return render(); }
+  try { await db.runTransaction(async tx => { const d = await tx.get(SHARED()); tx.set(SHARED(), { items: fn(d.exists ? d.data().items : []) }); }); }
+  catch { alert('Kaydedilemedi, internet bağlantını kontrol et.'); }
+}
+function watchShared() {
+  unsubShared?.(); unsubShared = null; shared = [];
+  if (demo || !user || lite) return;
+  unsubShared = SHARED().onSnapshot(d => {
+    shared = d.exists ? d.data().items : [];
+    // Sinem'de yalnız ana ekran ve liste ekranı yeniden çizilir (görev animasyonu, taslak, açık pencere bozulmasın).
+    if ($('dlg').open || welcome || inbox || celebrate || flow) return;
+    if (viewer || view === null || view === 'b') render();
+  }, () => {});
+}
+const msgBox = draft => `<h2 class="sec">SİNEM'E MESAJ</h2>
+      ${data.lastMood ? `<div class="note" style="margin-top:10px"><small>Son isteği · ${fmt(data.lastMood.date)}</small>${esc(data.lastMood.text)}</div>` : ''}
+      <div class="quick">${QUICK.map(q => `<button class="task" data-quick="${q}">${q}</button>`).join('')}</div>
+      <textarea id="anilMsg" placeholder="Sinem'e bir not bırak…">${esc(draft)}</textarea>
+      <div class="actions"><button class="ok" id="sendMsg">Gönder</button></div>
+      <div class="notes" style="margin:14px 0 22px">${sentList().slice(-3).reverse().map(m => {
+        const got = (data.msgs || []).find(x => x.id === m.id);
+        return `<div class="note"><small>${got?.seen ? 'Gördü ✓✓' : got ? 'Ulaştı ✓' : 'Henüz açmadı'} · ${fmt(m.date)}</small>${esc(m.text)}</div>`;
+      }).join('')}</div>`;
+
 function section(cat, title) {
   return `<section class="sect">
     <h2 class="sec">${title}${editing && cat.type === 'd' ? ` <button class="pill" data-editcat="${cat.id}">✏️</button>` : ''}</h2>
@@ -345,7 +393,7 @@ function page(title, body) {
   return `<header>
       <button class="pill" id="back" aria-label="Geri">‹</button>
       <h1>${title}</h1>
-      ${view === 'j' ? '' : `<button class="pill" id="toggle">${editing ? 'Bitti' : 'Düzenle'}</button>`}
+      ${view === 'j' || view === 'b' ? '' : `<button class="pill" id="toggle">${editing ? 'Bitti' : 'Düzenle'}</button>`}
     </header>${body}`;
 }
 
@@ -365,6 +413,18 @@ function render() {
     </form>`;
     return;
   }
+  if (lite) {
+    const draft = $('anilMsg')?.value || '';
+    app.innerHTML = `<header><h1>Sinem 🌸</h1></header>
+      <h2 class="sec">SENİ BUGÜN ${loveToday()} / 10 SEVİYOR</h2>
+      ${loveRow('span')}
+      ${loveWeek()}
+      <h2 class="sec">BUGÜN ${waterToday()} / ${WATER} BARDAK SU İÇTİ 💧</h2><br>
+      ${msgBox(draft)}
+      ${specialDays()}
+      <button class="edit-cat" id="logout">Çıkış yap</button>`;
+    return;
+  }
   if (viewer) {
     const list = (c, title) => `<section class="sect"><h2 class="sec">${title}</h2><div class="tasks">
       ${c.tasks.map(x => `<span class="task${isDone(x) ? '' : ' off'}">${isDone(x) ? '✅' : '⬜'} ${esc(x.name)}</span>`).join('')}</div></section>`;
@@ -375,15 +435,9 @@ function render() {
       ${loveRow('span')}
       ${loveWeek()}
       <h2 class="sec">BUGÜN ${waterToday()} / ${WATER} BARDAK SU İÇTİ 💧</h2><br>
-      <h2 class="sec">SİNEM'E MESAJ</h2>
-      ${data.lastMood ? `<div class="note" style="margin-top:10px"><small>Son isteği · ${fmt(data.lastMood.date)}</small>${esc(data.lastMood.text)}</div>` : ''}
-      <div class="quick">${QUICK.map(q => `<button class="task" data-quick="${q}">${q}</button>`).join('')}</div>
-      <textarea id="anilMsg" placeholder="Sinem'e bir not bırak…">${esc(draft)}</textarea>
-      <div class="actions"><button class="ok" id="sendMsg">Gönder</button></div>
-      <div class="notes" style="margin:14px 0 22px">${sentList().slice(-3).reverse().map(m => {
-        const got = (data.msgs || []).find(x => x.id === m.id);
-        return `<div class="note"><small>${got?.seen ? 'Gördü ✓✓' : got ? 'Ulaştı ✓' : 'Henüz açmadı'} · ${fmt(m.date)}</small>${esc(m.text)}</div>`;
-      }).join('')}</div>
+      ${msgBox(draft)}
+      <h2 class="sec">BİRLİKTE YAPILACAKLAR 🧡</h2>
+      <div style="margin:10px 0 28px">${sharedBox()}</div>
       <p class="sub">${streakText()}</p>
       ${specialDays()}
       <h2 class="sec">BUBBLE 🐶</h2>
@@ -454,6 +508,10 @@ function render() {
     app.innerHTML = page('Haftalık Görevler', weekCats().map(c => section(c, c.name + (c.day === today() ? ' · Bugün' : ''))).join(''));
     return;
   }
+  if (view === 'b') {
+    app.innerHTML = page('Birlikte 🧡', `<p class="sub">Birlikte yapmak istediklerimiz</p>${sharedBox()}`);
+    return;
+  }
   if (view === 'j') {
     const n = data.notes.find(x => x.id === noteId);
     app.innerHTML = page('Günlüğüm 📖', `
@@ -487,6 +545,7 @@ function render() {
       ${catBtn('d', '☀️', 'Günlük Görevler', leftLabel(left(todayCats())) + (streak() ? '<br>' + streakText() : ''))}
       ${catBtn('w', '📅', 'Haftalık Görevler', leftLabel(left(weekCats())))}
       ${catBtn('j', '📖', 'Günlüğüm', data.notes.length + ' not')}
+      ${catBtn('b', '🧡', 'Birlikte Yapılacaklar', sharedLeft() ? sharedLeft() + ' hayal bekliyor' : 'Bir şey ekle')}
     </div>
     <h2 class="sec" style="margin-top:28px">BUBBLE 🐶</h2>
     <div class="tasks quick">${BUBBLE.map(([k, n]) => `<button class="task" data-bubble="${k}">${n} · ${bubbleLabel(k)}</button>`).join('')}</div>
@@ -536,6 +595,9 @@ document.addEventListener('click', e => {
   else if (el.dataset.water) { const n = +el.dataset.water; data.water = { d: ymd(new Date()), n: n === waterToday() ? n - 1 : n }; save(); render(); }
   else if (el.dataset.star) { const x = (data.msgs || []).find(m => msgKey(m) === el.dataset.star); if (!x) return; x.star = !x.star; save(); render(); }
   else if (el.id === 'starNote') { const n = data.notes.find(x => x.id === noteId); n.star = !n.star; const v = $('note').value; save(); render(); $('note').value = v; }   // yazılan taslak kaybolmasın
+  else if (el.id === 'addShared') ask({ title: 'Birlikte ne yapalım? 🧡' }, (_, v) => sharedOp(items => [...items, { id: uid(), text: v.name, by: viewer ? 'Anıl' : 'Sinem', done: false }]));
+  else if (el.dataset.sh) sharedOp(items => items.map(i => i.id === el.dataset.sh ? { ...i, done: !i.done } : i));
+  else if (el.id === 'clearShared') { if (confirm('Yapılanlar listeden kaldırılsın mı?')) sharedOp(items => items.filter(i => !i.done)); }
   else if (el.id === 'closeInbox') { const now = new Date().toISOString(); inbox.forEach(x => x.seen = now); inbox = null; save(); render(); }
   else if (el.dataset.quick) sendToSinem(el.dataset.quick);
   else if (el.id === 'sendMsg') { const v = $('anilMsg').value.trim(); if (v) sendToSinem(v, true); }
@@ -631,6 +693,8 @@ async function pick(o) {
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) sendLove();
   if (!document.hidden && viewer) return loadSinem();
+  if (!document.hidden && lite) return loadLite();
+  if (lite) return;
   if (!document.hidden) checkMsgs();
   if (document.hidden || $('dlg').open || view === 'j') return;
   if (data.seen !== ymd(new Date())) { welcome = true; flow = null; }
@@ -669,7 +733,7 @@ async function sendToSinem(text, typed) {
 
 // Anıl'ın yeni mesajlarını çeker, Sinem'in verisine kalıcı yazar ve pop-up'ta gösterir.
 async function checkMsgs() {
-  if (demo || viewer || !user || !loaded || checking) return;
+  if (demo || viewer || lite || !user || !loaded || checking) return;
   checking = true;
   try {
     const got = [];
@@ -699,6 +763,13 @@ async function checkMsgs() {
   } catch {} finally { checking = false; }
 }
 
+// Sade ekran yalnız özeti okur; Sinem'in günlüğüne ve görevlerine kural gereği erişemez.
+async function loadLite() {
+  try { const d = await SUMMARY().get(); data = { ...SEED, ...(d.exists ? JSON.parse(d.data().json) : {}) }; }
+  catch { alert("Sinem'in verisi alınamadı."); }
+  render();
+}
+
 async function loadSinem() {
   try { data = JSON.parse((await db.collection('users').doc(SINEM_UID).get()).data().json); }
   catch { alert("Sinem'in verisi alınamadı."); }
@@ -718,9 +789,11 @@ auth.onAuthStateChanged(async u => {
   if (demo) return;
   user = u; loaded = false; inbox = null;
   view = null; editing = false; flow = null;
-  viewer = u?.email === VIEWER;
+  viewer = u?.email === VIEWER; lite = u?.email === LITE;
+  watchShared();
   if (!u) return render();
   if (viewer) return loadSinem();
+  if (lite) return loadLite();
   let local = null;
   // İlk girişte giriş öncesi telefondaki veri (eski anahtar) buluta taşınır.
   try { local = JSON.parse(localStorage.getItem(cacheKey()) || localStorage.getItem(KEY)); } catch {}
@@ -732,8 +805,10 @@ auth.onAuthStateChanged(async u => {
   if (cloud && (!local || ct > lt)) show(cloud);
   else if (!cloud || lt > ct) { if (!local) show(SEED); save(); }
   loaded = true;
+  pushSummary();
   checkMsgs();
 });
+if (LINK_KEY && !demo) auth.signInWithEmailAndPassword(LITE, LINK_KEY).catch(() => {});
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
 </script>
 </body>

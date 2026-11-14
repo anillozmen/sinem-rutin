@@ -2,6 +2,8 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function isAnil() { return request.auth != null && request.auth.token.email == 'anil@sinem-rutin.app'; }
+    // Sade ekran hesabı: yalnız özeti okur, mesaj yazar. Günlüğe ve görevlere erişemez.
+    function isLite() { return request.auth != null && request.auth.token.email == 'anilim@sinem-rutin.app'; }
     function isSinem() { return request.auth != null && request.auth.uid == 'tHNXU8bhZVM71nrXcloutAP6tiH3'; }
 
     // Herkes yalnız kendi verisini okur/yazar; Anıl Sinem'inkini yalnız okur.
@@ -11,8 +13,17 @@ service cloud.firestore {
     }
     // Anıl'dan Sinem'e mesajlar: Anıl yazar, ikisi okur.
     match /inbox/{doc} {
-      allow read: if isAnil() || isSinem();
-      allow write: if isAnil();
+      allow read: if isAnil() || isLite() || isSinem();
+      allow write: if isAnil() || isLite();
+    }
+    // Sade ekranın gördüğü özet (kalp, su, mesaj durumu): Sinem yazar.
+    match /ozet/{doc} {
+      allow read: if isAnil() || isLite() || isSinem();
+      allow write: if isSinem();
+    }
+    // Birlikte yapılacaklar listesi: Sinem ve Anıl okur, yazar.
+    match /ortak/{doc} {
+      allow read, write: if isAnil() || isSinem();
     }
   }
 }
