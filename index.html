@@ -623,7 +623,7 @@ document.addEventListener('submit', e => {
 
 async function sendToSinem(text) {
   try {
-    const r = await fetch(NTFY_SINEM, { method: 'POST', body: text, headers: { Title: "Anıl'dan 💌" } });
+    const r = await fetch(`${NTFY_SINEM}?title=${encodeURIComponent("Anıl'dan 💌")}`, { method: 'POST', body: text })   // başlık header'da olmaz: Türkçe harf/emoji fetch'i patlatır;
     if (!r.ok) throw r;
     sentMsg = text; render();
   } catch { alert('Gönderilemedi, internet bağlantını kontrol et.'); }
