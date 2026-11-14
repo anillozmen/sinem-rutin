@@ -52,6 +52,11 @@ h1{font-size:28px;font-weight:600;margin:0;flex:1}
 .love{display:flex;justify-content:space-between;margin-bottom:28px}
 .love button,.love span{font-size:26px;color:var(--soft);padding:0}
 .love .on{color:var(--pink)}
+.love button[data-water]{opacity:.3}
+.love button[data-water].on{opacity:1}
+.confetti{position:fixed;top:-40px;font-size:28px;pointer-events:none;z-index:9;animation:fall 3s ease-in forwards}
+@keyframes fall{to{transform:translateY(110vh) rotate(360deg)}}
+.memory{font:italic 17px ui-serif,'New York',Georgia,serif;text-align:center;color:var(--muted);margin:0;white-space:pre-wrap}
 .week{display:flex;justify-content:space-between;margin:-14px 0 28px;text-align:center;font-size:17px}
 .week small{display:block;color:var(--muted);font-size:12px}
 .quick{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
@@ -142,6 +147,9 @@ const NTFY = 'https://ntfy.sh/sinem-451965c8de30825e4a6b';
 const NTFY_SINEM = 'https://ntfy.sh/sinem-40c9efc02362d4f7195a';
 const QUICK = ['Yoldayım 🏃', 'Tamam aşkım 💝', 'Hemen hallediyorum 💪', 'Ben de seni seviyorum ❤️'];
 const SPECIAL = [['💞 Yıldönümümüz', '2025-07-19'], ["🎂 Sinem'in doğum günü", '0000-12-25'], ["🎂 Anıl'ın doğum günü", '0000-07-17']];
+const WATER = 8;   // günlük bardak hedefi
+const BDAY = '12-25';   // Sinem'in doğum günü (ay-gün)
+const BDAY_MSG = 'İyi ki doğdun aşkım! 🎂 Hayatıma girdiğin günden beri her şey daha güzel. Yeni yaşın sana en az senin bana verdiğin kadar mutluluk getirsin. Seni çok seviyorum ❤️';
 const BUBBLE = [['mama', '🥣 Mama alındı'], ['banyo', '🛁 Banyo / tıraş']];
 const lc = s => s.toLocaleLowerCase('tr');
 // steps: [soru, [[emoji, seçenek], ...]]; msg seçimleri sırayla alır.
@@ -252,6 +260,20 @@ const YAY = 'Bugün harikaydın aşkım, gerisi senin zamanın 💕';
 const loveToday = () => data.love?.d === ymd(new Date()) ? data.love.n : 0;
 const loveRow = tag => `<div class="love">${Array.from({ length: 10 }, (_, i) => `<${tag} data-love="${i + 1}" class="${i < loveToday() ? 'on' : ''}">♥</${tag}>`).join('')}</div>`;
 
+const waterToday = () => data.water?.d === ymd(new Date()) ? data.water.n : 0;
+const waterRow = () => `<div class="love">${Array.from({ length: WATER }, (_, i) => `<button data-water="${i + 1}" class="${i < waterToday() ? 'on' : ''}">💧</button>`).join('')}</div>`;
+const memories = () => [...data.notes, ...(data.msgs || [])].filter(x => x.star);
+const isBday = () => ymd(new Date()).slice(5) === BDAY;
+function confetti() {
+  for (let i = 0; i < 40; i++) {
+    const c = document.createElement('span');
+    c.className = 'confetti';
+    c.textContent = ['🎉', '🎂', '🎈', '💖', '✨'][i % 5];
+    c.style.cssText = `left:${Math.random() * 100}vw;animation-delay:${Math.random() * 2}s`;
+    c.addEventListener('animationend', () => c.remove());
+    document.body.append(c);
+  }
+}
 const DAYS_SHORT = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
 const daysAgo = d => dayNo(new Date()) - dayNo(new Date(d + 'T00:00'));
 // Bugün bittiyse bugünden, bitmediyse dünden geriye kesintisiz biten gün sayısı.
@@ -347,6 +369,7 @@ function render() {
       <h2 class="sec">SENİ BUGÜN ${loveToday()} / 10 SEVİYOR</h2>
       ${loveRow('span')}
       ${loveWeek()}
+      <h2 class="sec">BUGÜN ${waterToday()} / ${WATER} BARDAK SU İÇTİ 💧</h2><br>
       <h2 class="sec">SİNEM'E MESAJ</h2>
       ${data.lastMood ? `<div class="note" style="margin-top:10px"><small>Son isteği · ${fmt(data.lastMood.date)}</small>${esc(data.lastMood.text)}</div>` : ''}
       <div class="quick">${QUICK.map(q => `<button class="task" data-quick="${q}">${q}</button>`).join('')}</div>
@@ -366,16 +389,18 @@ function render() {
   }
   if (welcome) {
     app.innerHTML = `<div class="welcome">
-      <p class="msg">${MESSAGES[dayNo(new Date()) % MESSAGES.length]}</p>
+      <p class="msg">${isBday() ? BDAY_MSG : MESSAGES[dayNo(new Date()) % MESSAGES.length]}</p>
+      ${memories().length ? `<p class="memory">⭐ Bir anı · ${fmt(memories()[dayNo(new Date()) % memories().length].date)}<br>${esc(memories()[dayNo(new Date()) % memories().length].text)}</p>` : ''}
       <button class="go" id="closeWelcome">Ana sayfaya geç ›</button>
     </div>`;
+    if (isBday()) confetti();
     return;
   }
   if (inbox) {
     app.innerHTML = `<div class="flow sent">
       <div class="flow-emo">💌</div>
       <h2>Anıl'dan mesaj var</h2>
-      ${inbox.map(x => `<div class="note"><small>${fmt(x.date)}</small>${esc(x.text)}</div>`).join('')}
+      ${inbox.map(x => `<button class="note" data-star="${x.date}"><small>${x.star ? '⭐ Anılarda' : '☆ Dokun, anı yap'} · ${fmt(x.date)}</small>${esc(x.text)}</button>`).join('')}
       <button class="black" id="closeInbox">Tamam</button>
     </div>`;
     return;
@@ -426,11 +451,11 @@ function render() {
     app.innerHTML = page('Günlüğüm 📖', `
       <textarea id="note" placeholder="Bugün aklından neler geçti?">${n ? esc(n.text) : ''}</textarea>
       <div class="actions">
-        ${n ? '<button class="del" id="delNote">Sil</button><button id="cancelNote">Vazgeç</button>' : ''}
+        ${n ? `<button class="del" id="delNote">Sil</button><button id="starNote">${n.star ? '⭐ Anılardan çıkar' : '☆ Anı yap'}</button><button id="cancelNote">Vazgeç</button>` : ''}
         <button class="ok" id="saveNote">${n ? 'Güncelle' : 'Kaydet'}</button>
       </div>
       <div class="notes">
-        ${newestFirst(data.notes).map(x => `<button class="note${x.id === noteId ? ' on' : ''}" data-note="${x.id}"><small>${fmt(x.date)}</small>${esc(x.text)}</button>`).join('') || '<div class="empty">Henüz not yok</div>'}
+        ${newestFirst(data.notes).map(x => `<button class="note${x.id === noteId ? ' on' : ''}" data-note="${x.id}"><small>${x.star ? '⭐ ' : ''}${fmt(x.date)}</small>${esc(x.text)}</button>`).join('') || '<div class="empty">Henüz not yok</div>'}
       </div>`);
     return;
   }
@@ -441,9 +466,11 @@ function render() {
       <span class="call-t"><b>Anıl'ı Ara</b><i>Karıma özel destek hattı</i></span>
       <span class="phone">📞</span>
     </a>
-    ${data.msgs?.length ? `<div class="note" style="margin:-12px 0 28px"><small>💌 Anıl'dan · ${fmt(data.msgs.at(-1).date)}</small>${esc(data.msgs.at(-1).text)}</div>` : ''}
+    ${data.msgs?.length ? `<button class="note" style="margin:-12px 0 28px;width:100%" data-star="${data.msgs.at(-1).date}"><small>💌 Anıl'dan · ${fmt(data.msgs.at(-1).date)}${data.msgs.at(-1).star ? ' · ⭐' : ' · ☆ anı yap'}</small>${esc(data.msgs.at(-1).text)}</button>` : ''}
     <h2 class="sec">ANIL'I BUGÜN NE KADAR SEVİYORUM?</h2>
     ${loveRow('button')}
+    <h2 class="sec">BUGÜN ${waterToday()} / ${WATER} BARDAK SU</h2>
+    ${waterRow()}
     <h2 class="sec">DUYGU MODLARI</h2>
     <p class="sub">Ne hissediyorsun aşkım?</p>
     <div class="moods">${MOODS.map((m, i) => `<button class="mood" data-mood="${i}" style="background:${m.color}">
@@ -491,6 +518,9 @@ document.addEventListener('click', e => {
   else if (el.id === 'closeWelcome') { welcome = false; data.seen = ymd(new Date()); save(); render(); }
   else if (el.id === 'closeYay') { celebrate = false; render(); }
   else if (el.dataset.love) { data.love = { d: ymd(new Date()), n: +el.dataset.love }; data.loveLog = Object.fromEntries(Object.entries({ ...data.loveLog, [data.love.d]: data.love.n }).slice(-14)); save(); render(); fetch(NTFY, { method: 'POST', body: `Sinem seni bugün ${el.dataset.love} / 10 seviyor ❤️` }).catch(() => {}); hearts(document.querySelector(`[data-love="${el.dataset.love}"]`)); }
+  else if (el.dataset.water) { const n = +el.dataset.water; data.water = { d: ymd(new Date()), n: n === waterToday() ? n - 1 : n }; save(); render(); }
+  else if (el.dataset.star) { const x = (data.msgs || []).find(m => m.date === el.dataset.star); x.star = !x.star; save(); render(); }
+  else if (el.id === 'starNote') { const n = data.notes.find(x => x.id === noteId); n.star = !n.star; const v = $('note').value; save(); render(); $('note').value = v; }   // yazılan taslak kaybolmasın
   else if (el.id === 'closeInbox') { inbox = null; render(); }
   else if (el.dataset.quick) sendToSinem(el.dataset.quick);
   else if (el.id === 'sendMsg') { const v = $('anilMsg').value.trim(); if (v) sendToSinem(v); }
