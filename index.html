@@ -236,6 +236,18 @@ const sentList = () => { try { return JSON.parse(localStorage.getItem(SENT_KEY))
 const SUMMARY = () => db.collection('ozet').doc('sinem');   // sade ekranın okuduğu özet; Sinem yazar
 const SHARED = () => db.collection('ortak').doc('liste');   // birlikte yapılacaklar; Sinem ve Anıl yazar
 let shared = [], unsubShared = null;
+// Anıl'ın fotoğrafı kodda durmaz (depo herkese açık); Firestore ozet/foto belgesinden bir kez çekilip telefonda saklanır.
+const PHOTO_KEY = 'sinem-rutin-foto';
+const photo = () => { try { const u = localStorage.getItem(PHOTO_KEY) || ''; return /^data:image\/(jpeg|png);base64,[A-Za-z0-9+/=]+$/.test(u) ? u : ''; } catch { return ''; } };
+async function loadPhoto() {
+  if (demo) return;
+  try {
+    const u = (await db.collection('ozet').doc('foto').get()).data()?.url || '';
+    if (u === localStorage.getItem(PHOTO_KEY)) return;
+    localStorage.setItem(PHOTO_KEY, u);
+    if (view === null && !welcome && !inbox && !celebrate && !flow && !$('dlg').open) render();
+  } catch {}
+}
 const INBOX = () => db.collection('inbox').doc('sinem');   // Anıl yazar, Sinem okur (Firestore kuralı gerekir)
 let loaded = false;   // Sinem'in verisi yerleşti mi (mesajlar yanlış veriye yazılmasın)
 let checking = false, sending = false;
@@ -534,7 +546,7 @@ function render() {
   view = null;
   app.innerHTML = `<header><h1>Merhaba Sinem 🌸</h1></header>
     <a class="call" id="call" href="${data.phone ? 'tel:' + esc(data.phone) : '#'}">
-      <span class="avatar">A</span><!-- fotoğraf gelince: style="background-image:url(anil.jpg)" ve harfi sil -->
+      <span class="avatar"${photo() ? ` style="background-image:url(${photo()})"` : ''}>${photo() ? '' : 'A'}</span>
       <span class="call-t"><b>Anıl'ı Ara</b><i>Karıma özel destek hattı</i></span>
       <span class="phone">📞</span>
     </a>
@@ -826,6 +838,7 @@ auth.onAuthStateChanged(async u => {
   loaded = true;
   pushSummary();
   checkMsgs();
+  loadPhoto();
 });
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
 </script>
