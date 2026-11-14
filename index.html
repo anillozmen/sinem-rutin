@@ -225,6 +225,9 @@ let noteId = null; // düzenlenen not
 let flow = null;   // { m: mod, picks: [], sent }
 let inbox = null;  // Sinem'e gelen, henüz kapatılmamış Anıl mesajları
 let sentMsg = '';  // Anıl ekranında son gönderilen mesaj
+let loaded = false;   // Sinem'in verisi yerleşti mi (mesajlar yanlış veriye yazılmasın)
+let checking = false, sending = false;
+const msgKey = m => m.id || m.date;   // eski mesajlarda id yok
 
 const cacheKey = () => KEY + ':' + user.uid;
 const remote = () => db.collection('users').doc(user.uid);
@@ -298,7 +301,7 @@ function specialDays() {
     let next = new Date(now.getFullYear(), m - 1, d);
     if (dayNo(next) < t0) next = new Date(now.getFullYear() + 1, m - 1, d);
     const left = dayNo(next) - t0, age = next.getFullYear() - y;
-    return `<div class="note"><small>${name} · ${age}. yıl</small>${left ? left + ' gün kaldı' : 'Bugün! 🎉'}</div>`;
+    return `<div class="note"><small>${name} · ${age}. ${name.includes('doğum') ? 'yaş' : 'yıl'}</small>${left ? left + ' gün kaldı' : 'Bugün! 🎉'}</div>`;
   });
   return `<h2 class="sec">ÖZEL GÜNLER</h2><div class="notes" style="margin:10px 0 28px">
     <div class="note"><small>Sevgili olalı</small>${t0 - dayNo(new Date(SPECIAL[0][1] + 'T00:00'))} gün 💕</div>${rows.join('')}</div>`;
@@ -363,7 +366,7 @@ function render() {
   if (viewer) {
     const list = (c, title) => `<section class="sect"><h2 class="sec">${title}</h2><div class="tasks">
       ${c.tasks.map(x => `<span class="task${isDone(x) ? '' : ' off'}">${isDone(x) ? '✅' : '⬜'} ${esc(x.name)}</span>`).join('')}</div></section>`;
-    const all = todayCats().flatMap(c => c.tasks);
+    const all = todayCats().flatMap(c => c.tasks), draft = $('anilMsg')?.value || '';
     app.innerHTML = `<header><h1>Sinem'in Günü 🌸</h1></header>
       <p class="sub">Bugün ${all.filter(isDone).length} / ${all.length} görev tamam</p>
       <h2 class="sec">SENİ BUGÜN ${loveToday()} / 10 SEVİYOR</h2>
@@ -373,7 +376,7 @@ function render() {
       <h2 class="sec">SİNEM'E MESAJ</h2>
       ${data.lastMood ? `<div class="note" style="margin-top:10px"><small>Son isteği · ${fmt(data.lastMood.date)}</small>${esc(data.lastMood.text)}</div>` : ''}
       <div class="quick">${QUICK.map(q => `<button class="task" data-quick="${q}">${q}</button>`).join('')}</div>
-      <textarea id="anilMsg" placeholder="Sinem'e bir not bırak…"></textarea>
+      <textarea id="anilMsg" placeholder="Sinem'e bir not bırak…">${esc(draft)}</textarea>
       <div class="actions"><button class="ok" id="sendMsg">Gönder</button></div>
       ${sentMsg ? `<p class="sub">Gönderildi: ${esc(sentMsg)} ✓</p>` : ''}
       <p class="sub">${streakText()}</p>
@@ -400,7 +403,7 @@ function render() {
     app.innerHTML = `<div class="flow sent">
       <div class="flow-emo">💌</div>
       <h2>Anıl'dan mesaj var</h2>
-      ${inbox.map(x => `<button class="note" data-star="${x.date}"><small>${x.star ? '⭐ Anılarda' : '☆ Dokun, anı yap'} · ${fmt(x.date)}</small>${esc(x.text)}</button>`).join('')}
+      ${inbox.map(x => `<button class="note" data-star="${msgKey(x)}"><small>${x.star ? '⭐ Anılarda' : '☆ Dokun, anı yap'} · ${fmt(x.date)}</small>${esc(x.text)}</button>`).join('')}
       <button class="black" id="closeInbox">Tamam</button>
     </div>`;
     return;
@@ -419,7 +422,7 @@ function render() {
       app.innerHTML = `<div class="flow sent">
         <div class="flow-emo">${m.emoji}</div>
         <h2>Anıl'a iletildi!</h2>
-        <ul>${picks.map((x, i) => `<li>${m.steps[i][0]} <b>${x}</b></li>`).join('')}</ul>
+        <ul>${picks.map((x, i) => `<li>${m.steps[i][0]} <b>${esc(x)}</b></li>`).join('')}</ul>
         <p class="fun">${m.fun}</p>
         <button class="black" id="closeFlow">Tamam</button>
       </div>`;
@@ -466,7 +469,7 @@ function render() {
       <span class="call-t"><b>Anıl'ı Ara</b><i>Karıma özel destek hattı</i></span>
       <span class="phone">📞</span>
     </a>
-    ${data.msgs?.length ? `<button class="note" style="margin:-12px 0 28px;width:100%" data-star="${data.msgs.at(-1).date}"><small>💌 Anıl'dan · ${fmt(data.msgs.at(-1).date)}${data.msgs.at(-1).star ? ' · ⭐' : ' · ☆ anı yap'}</small>${esc(data.msgs.at(-1).text)}</button>` : ''}
+    ${data.msgs?.length ? `<button class="note" style="margin:-12px 0 28px;width:100%" data-star="${msgKey(data.msgs.at(-1))}"><small>💌 Anıl'dan · ${fmt(data.msgs.at(-1).date)}${data.msgs.at(-1).star ? ' · ⭐' : ' · ☆ anı yap'}</small>${esc(data.msgs.at(-1).text)}</button>` : ''}
     <h2 class="sec">ANIL'I BUGÜN NE KADAR SEVİYORUM?</h2>
     ${loveRow('button')}
     <h2 class="sec">BUGÜN ${waterToday()} / ${WATER} BARDAK SU</h2>
@@ -519,11 +522,11 @@ document.addEventListener('click', e => {
   else if (el.id === 'closeYay') { celebrate = false; render(); }
   else if (el.dataset.love) { data.love = { d: ymd(new Date()), n: +el.dataset.love }; data.loveLog = Object.fromEntries(Object.entries({ ...data.loveLog, [data.love.d]: data.love.n }).slice(-14)); save(); render(); fetch(NTFY, { method: 'POST', body: `Sinem seni bugün ${el.dataset.love} / 10 seviyor ❤️` }).catch(() => {}); hearts(document.querySelector(`[data-love="${el.dataset.love}"]`)); }
   else if (el.dataset.water) { const n = +el.dataset.water; data.water = { d: ymd(new Date()), n: n === waterToday() ? n - 1 : n }; save(); render(); }
-  else if (el.dataset.star) { const x = (data.msgs || []).find(m => m.date === el.dataset.star); x.star = !x.star; save(); render(); }
+  else if (el.dataset.star) { const x = (data.msgs || []).find(m => msgKey(m) === el.dataset.star); if (!x) return; x.star = !x.star; save(); render(); }
   else if (el.id === 'starNote') { const n = data.notes.find(x => x.id === noteId); n.star = !n.star; const v = $('note').value; save(); render(); $('note').value = v; }   // yazılan taslak kaybolmasın
   else if (el.id === 'closeInbox') { inbox = null; render(); }
   else if (el.dataset.quick) sendToSinem(el.dataset.quick);
-  else if (el.id === 'sendMsg') { const v = $('anilMsg').value.trim(); if (v) sendToSinem(v); }
+  else if (el.id === 'sendMsg') { const v = $('anilMsg').value.trim(); if (v) sendToSinem(v, true); }
   else if (el.dataset.bubble) {
     const [k, n] = BUBBLE.find(b => b[0] === el.dataset.bubble);
     if (!confirm(`"${n}" bugün olarak işaretlensin mi?`)) return;
@@ -550,7 +553,7 @@ document.addEventListener('click', e => {
   }
   else if (el.dataset.add) {
     const cat = catById(el.dataset.add);
-    ask({ title: 'Yeni görev', sec: { cats: sameType(cat), value: cat.id } }, (_, v) => { catById(v.sec).tasks.push(t(v.name, cat.type)); save(); render(); });
+    ask({ title: 'Yeni görev', sec: { cats: sameType(cat), value: cat.id } }, (_, v) => { catById(v.sec).tasks.push(t(v.name, cat.type)); markDay(); save(); render(); });
   }
   else if (el.dataset.undo) { findTask(el.dataset.undo)[1].done = null; markDay(); save(); render(); }
   else if (el.dataset.task) {
@@ -562,7 +565,7 @@ document.addEventListener('click', e => {
           task.name = v.name;
           if (v.sec !== cat.id) { cat.tasks = cat.tasks.filter(x => x !== task); catById(v.sec).tasks.push(task); }
         }
-        save(); render();
+        markDay(); save(); render();
       });
     } else {
       task.done = periodKey(task.type);
@@ -621,28 +624,37 @@ document.addEventListener('submit', e => {
     .catch(() => $('lErr').textContent = 'Kullanıcı adı ya da şifre yanlış.');
 });
 
-async function sendToSinem(text) {
+async function sendToSinem(text, typed) {
+  if (sending) return;   // çift dokunuş iki mesaj göndermesin
+  sending = true;
   try {
-    const r = await fetch(`${NTFY_SINEM}?title=${encodeURIComponent("Anıl'dan 💌")}`, { method: 'POST', body: text })   // başlık header'da olmaz: Türkçe harf/emoji fetch'i patlatır;
+    // başlık header'da olmaz: Türkçe harf/emoji fetch'i patlatır
+    const r = await fetch(`${NTFY_SINEM}?title=${encodeURIComponent("Anıl'dan 💌")}`, { method: 'POST', body: text });
     if (!r.ok) throw r;
-    sentMsg = text; render();
+    sentMsg = text;
+    if (typed && $('anilMsg')) $('anilMsg').value = '';
+    render();
   } catch { alert('Gönderilemedi, internet bağlantını kontrol et.'); }
+  finally { sending = false; }
 }
 
 // Anıl'ın yeni mesajlarını çeker, Sinem'in verisine kalıcı yazar ve pop-up'ta gösterir.
 async function checkMsgs() {
-  if (demo || viewer || !user) return;
+  if (demo || viewer || !user || !loaded || checking) return;
+  checking = true;
   try {
     const r = await fetch(`${NTFY_SINEM}/json?poll=1&since=${data.msgSince || '12h'}`);
-    const got = (await r.text()).split('\n').filter(Boolean).map(l => JSON.parse(l)).filter(m => m.event === 'message');
+    const have = new Set((data.msgs || []).map(m => m.id));
+    const got = (await r.text()).split('\n').filter(Boolean).map(l => JSON.parse(l)).filter(m => m.event === 'message' && !have.has(m.id));
     if (!got.length) return;
-    const fresh = got.map(m => ({ text: m.message, date: new Date(m.time * 1000).toISOString() }));
-    data.msgs = [...(data.msgs || []), ...fresh].slice(-20);
+    const fresh = got.map(m => ({ id: m.id, text: m.message, date: new Date(m.time * 1000).toISOString() }));
+    const all = [...(data.msgs || []), ...fresh], recent = all.filter(x => !x.star).slice(-20);
+    data.msgs = all.filter(x => x.star || recent.includes(x));   // anı yapılanlar silinmez
     data.msgSince = got.at(-1).id;
     save();
-    inbox = fresh;
+    inbox = [...(inbox || []), ...fresh];
     if (!$('dlg').open && view !== 'j') render();   // günlük taslağı silinmesin
-  } catch {}
+  } catch {} finally { checking = false; }
 }
 
 async function loadSinem() {
@@ -662,7 +674,7 @@ if (demo) {
 
 auth.onAuthStateChanged(async u => {
   if (demo) return;
-  user = u;
+  user = u; loaded = false; inbox = null;
   view = null; editing = false; flow = null;
   viewer = u?.email === VIEWER;
   if (!u) return render();
@@ -673,10 +685,11 @@ auth.onAuthStateChanged(async u => {
   if (local) show(local);
   let cloud;
   try { const d = await remote().get(); cloud = d.exists ? JSON.parse(d.data().json) : null; }
-  catch { if (!local) show(SEED); return; }   // çevrimdışı: telefondaki veriyle devam
+  catch { if (!local) show(SEED); loaded = true; return; }   // çevrimdışı: telefondaki veriyle devam
   const lt = local?.updated || 0, ct = cloud?.updated || 0;
   if (cloud && (!local || ct > lt)) show(cloud);
   else if (!cloud || lt > ct) { if (!local) show(SEED); save(); }
+  loaded = true;
   checkMsgs();
 });
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
