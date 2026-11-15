@@ -109,6 +109,24 @@ input{-webkit-user-select:text;user-select:text}
 .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:6px}
 .actions .del{margin-right:auto;color:#d9536f}
 .actions .ok{background:var(--pink);color:#fff;border-radius:999px;padding:8px 18px}
+.ring{width:190px;height:190px;border-radius:50%;margin:6px auto 22px;display:grid;place-items:center;background:conic-gradient(var(--pink) calc(var(--p)*1%),var(--soft) 0)}
+.ring div{width:158px;height:158px;border-radius:50%;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:2px}
+.ring b{font:600 30px ui-serif,'New York',Georgia,serif}
+.ring small{color:var(--muted);font-size:13px;padding:0 14px}
+.month{display:flex;align-items:center;justify-content:space-between}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;text-align:center;margin:12px 0 8px}
+.cal small{color:var(--muted);font-size:11px}
+.cal button{aspect-ratio:1;border-radius:50%;font-size:15px;position:relative}
+.cal .p{background:var(--pink);color:#fff}
+.cal .pp{outline:2px dashed var(--pink);outline-offset:-3px}
+.cal .f{background:#e6dcf5}
+.cal .o{background:#b9a3e3;color:#fff}
+.cal .t{font-weight:700;text-decoration:underline}
+.cal .s{box-shadow:0 0 0 2px var(--text)}
+.cal .lg::after{content:'';position:absolute;bottom:3px;left:50%;width:4px;height:4px;margin-left:-2px;border-radius:50%;background:currentColor}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--muted);margin-bottom:26px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px;vertical-align:-1px}
+.task.on{background:var(--pink);color:#fff}
 </style>
 </head>
 <body>
@@ -346,6 +364,92 @@ function loveWeek() {
   return `<div class="week">${out.join('')}</div>`;
 }
 
+// Regl takibi: data.cycle = { periods: [{ s: başlangıç, e?: bitiş }], log: { 'YYYY-MM-DD': { f: akış, s: [belirti], m: [ruh hali] } } }
+const FLOW = ['🔸 Lekelenme', '💧 Hafif', '💧💧 Orta', '💧💧💧 Yoğun'];
+const SYMPTOMS = ['😖 Kramp', '😣 Bel ağrısı', '🤕 Baş ağrısı', '🎈 Şişkinlik', '💗 Göğüs hassasiyeti', '🔴 Sivilce', '😴 Yorgunluk', '🤢 Bulantı', '🍫 Tatlı krizi', '🌙 Uykusuzluk', '💊 Ağrı kesici aldım'];
+const CMOODS = ['😊 Mutlu', '😌 Sakin', '⚡ Enerjik', '🥺 Hassas', '😤 Sinirli', '😢 Üzgün', '😟 Kaygılı'];
+const cy = () => data.cycle ||= { periods: [], log: {} };
+const dn = s => dayNo(new Date(s + 'T00:00'));
+const addD = (s, k) => { const d = new Date(s + 'T00:00'); d.setDate(d.getDate() + k); return ymd(d); };
+const short = s => new Date(s + 'T00:00').toLocaleDateString('tr-TR', { day: 'numeric', month: 'long' });
+let cyc = { sel: ymd(new Date()), m: ymd(new Date()).slice(0, 7) };   // seçili gün ve takvimde gösterilen ay
+// Tahmin: son 6 döngünün ortalaması; kayıt yoksa 28 gün döngü, 5 gün regl. Yumurtlama sonraki reglden 14 gün önce.
+function cycleInfo(c = cy(), now = ymd(new Date())) {
+  const ps = [...c.periods].sort((a, b) => a.s.localeCompare(b.s));
+  if (!ps.length) return null;
+  // 15 günden kısa / 60 günden uzun aralıklar unutulmuş ya da yanlış kayıttır, ortalamaya girmez.
+  const gaps = ps.slice(1).map((p, k) => dn(p.s) - dn(ps[k].s)).filter(g => g >= 15 && g <= 60).slice(-6);
+  const durs = ps.filter(p => p.e).map(p => dn(p.e) - dn(p.s) + 1).slice(-6);
+  const avg = (a, d) => a.length ? Math.round(a.reduce((x, y) => x + y) / a.length) : d;
+  const len = avg(gaps, 28), dur = avg(durs, 5), last = ps.at(-1), day = dn(now) - dn(last.s) + 1;
+  const next = addD(last.s, len), left = dn(next) - dn(now);
+  return { ps, len, dur, last, day, next, left, n: gaps.length, late: Math.max(0, -left), ovu: addD(next, -14),
+    on: day >= 1 && now <= (last.e || addD(last.s, dur - 1)) };
+}
+const inPeriod = (s, i) => i?.ps.find(p => s >= p.s && s <= (p.e || addD(p.s, i.dur - 1)));
+const openP = s => cy().periods.find(p => !p.e && s >= p.s && dn(s) - dn(p.s) <= 14);   // bitişi girilmemiş, 2 haftadan yeni regl
+function dayKind(s, i) {
+  if (!i) return '';
+  if (inPeriod(s, i)) return 'p';
+  for (let k = 0; k < 3; k++) {
+    const st = addD(i.next, k * i.len), ov = addD(st, -14);
+    if (s >= st && s <= addD(st, i.dur - 1)) return 'pp';
+    if (s === ov) return 'o';
+    if (s >= addD(ov, -5) && s <= addD(ov, 1)) return 'f';
+  }
+  return '';
+}
+const cycLabel = () => { const i = cycleInfo(); return !i ? 'Takibe başla' : i.on ? `Regl ${i.day}. gün` : i.late ? `${i.late} gün gecikti` : `Regle ${i.left} gün`; };
+function calendar(i) {
+  const [y, m] = cyc.m.split('-').map(Number), first = new Date(y, m - 1, 1), now = ymd(new Date());
+  const cells = Array((first.getDay() + 6) % 7).fill('<span></span>');
+  for (let d = 1; d <= new Date(y, m, 0).getDate(); d++) {
+    const s = ymd(new Date(y, m - 1, d));
+    cells.push(`<button data-cday="${s}" class="${dayKind(s, i)}${s === now ? ' t' : ''}${s === cyc.sel && !viewer ? ' s' : ''}${cy().log[s] ? ' lg' : ''}">${d}</button>`);
+  }
+  return `<div class="month"><button class="pill" data-cm="-1" aria-label="Önceki ay">‹</button><b class="serif">${first.toLocaleDateString('tr-TR', { month: 'long', year: 'numeric' })}</b><button class="pill" data-cm="1" aria-label="Sonraki ay">›</button></div>
+    <div class="cal">${DAYS_SHORT.map(d => `<small>${d}</small>`).join('')}${cells.join('')}</div>
+    <div class="legend"><span><i style="background:var(--pink)"></i>Regl</span><span><i style="outline:2px dashed var(--pink);outline-offset:-2px"></i>Tahmini regl</span><span><i style="background:#e6dcf5"></i>Doğurgan</span><span><i style="background:#b9a3e3"></i>Yumurtlama</span><span>• not var</span></div>`;
+}
+// ro: yönetici ekranı, yalnız görür.
+function cycleBody(ro) {
+  const i = cycleInfo(), now = ymd(new Date()), log = cy().log;
+  const [big, small] = !i ? ['🌸', ro ? 'Henüz kayıt yok' : 'Regl başladığı günü seçip kaydet']
+    : i.on ? [`${i.day}. gün`, `regl · tahmini bitiş ${short(i.last.e || addD(i.last.s, i.dur - 1))}`]
+    : i.late ? [`${i.late} gün`, `gecikti · beklenen ${short(i.next)}`]
+    : [`${i.left} gün`, `sonraki regle · ${short(i.next)}<br>döngünün ${i.day}. günü`];
+  const cnt = {};
+  Object.entries(log).filter(([d]) => daysAgo(d) <= 90).forEach(([, l]) => [...(l.s || []), ...(l.m || [])].forEach(x => cnt[x] = (cnt[x] || 0) + 1));
+  const top = Object.entries(cnt).sort((a, b) => b[1] - a[1]).slice(0, 3);
+  let out = `<div class="ring" style="--p:${i ? Math.min(100, i.day / i.len * 100) : 0}"><div><b>${big}</b><small>${small}</small></div></div>
+    ${i ? `<div class="notes" style="margin:0 0 12px">
+      ${!i.on && !i.late && i.left <= 3 ? `<div class="note"><small>Yaklaşıyor 🌸</small>Regle ${i.left} gün kaldı${ro ? '' : ', ped stoğunu kontrol et'}</div>` : ''}
+      <div class="note"><small>Doğurgan dönem · 🥚 yumurtlama</small>${short(addD(i.ovu, -5))} – ${short(addD(i.ovu, 1))} · ${short(i.ovu)}</div>
+      <div class="note"><small>Ortalama</small>Döngü ${i.len} gün · regl ${i.dur} gün${i.n ? ` (son ${i.n} döngü)` : ' (henüz varsayılan)'}</div>
+      ${top.length ? `<div class="note"><small>Son 3 ayda en sık</small>${esc(top.map(([k, n]) => `${k} ×${n}`).join(' · '))}</div>` : ''}
+    </div><p class="memory" style="font-size:13px;margin-bottom:26px">Tahminler geçmiş kayıtların ortalamasıdır; doğum kontrolü için kullanılmaz.</p>` : ''}
+    ${calendar(i)}`;
+  if (ro) {
+    const recent = Object.entries(log).filter(([d]) => daysAgo(d) <= 14).sort((a, b) => b[0].localeCompare(a[0]));
+    out += `<h2 class="sec">SON 2 HAFTA</h2><div class="notes" style="margin:10px 0 26px">${recent.map(([d, l]) => `<div class="note"><small>${short(d)}</small>${esc([l.f, ...(l.s || []), ...(l.m || [])].filter(Boolean).join(' · '))}</div>`).join('') || '<div class="empty">Kayıt yok</div>'}</div>`;
+  } else {
+    const l = log[cyc.sel] || {}, chips = (k, list) => `<div class="tasks">${list.map(v => `<button class="task${(k === 'f' ? l.f === v : l[k]?.includes(v)) ? ' on' : ''}" data-ctag="${k}:${v}">${v}</button>`).join('')}</div>`;
+    const act = openP(cyc.sel) ? '<button class="go" id="cEnd">✅ Regl bu gün bitti</button>'
+      : inPeriod(cyc.sel, i) ? '<p class="sub">🩸 Bu gün regl kaydında</p>'
+      : '<button class="go" id="cStart">🩸 Regl bu gün başladı</button>';
+    out += `<section class="sect"><h2 class="sec">SEÇİLİ GÜN · ${cyc.sel === now ? 'BUGÜN' : short(cyc.sel).toLocaleUpperCase('tr')}</h2>
+      <input type="date" class="field" id="cDate" value="${cyc.sel}" max="${now}">
+      <div style="text-align:center">${act}</div></section>
+      <section class="sect"><h2 class="sec">AKIŞ</h2>${chips('f', FLOW)}</section>
+      <section class="sect"><h2 class="sec">BELİRTİLER</h2>${chips('s', SYMPTOMS)}</section>
+      <section class="sect"><h2 class="sec">RUH HALİ</h2>${chips('m', CMOODS)}</section>`;
+  }
+  const ps = i?.ps || [];
+  out += `<h2 class="sec">GEÇMİŞ${ro || !ps.length ? '' : ' · SİLMEK İÇİN DOKUN'}</h2><div class="notes" style="margin:10px 0 26px">${ps.map((p, k) => [p, ps[k + 1] && dn(ps[k + 1].s) - dn(p.s)]).reverse().map(([p, len]) =>
+    `<${ro ? 'div' : 'button'} class="note"${ro ? '' : ` data-cdel="${p.s}"`}><small>${short(p.s)}${p.e ? ' – ' + short(p.e) : ''}</small>Regl ${p.e ? dn(p.e) - dn(p.s) + 1 + ' gün' : '· bitiş girilmedi'}${len ? ` · döngü ${len} gün` : ''}</${ro ? 'div' : 'button'}>`).join('') || '<div class="empty">Henüz kayıt yok</div>'}</div>`;
+  return out;
+}
+
 const sharedLeft = () => shared.filter(x => !x.done).length;
 function sharedBox() {
   return `<div class="tasks">
@@ -407,7 +511,7 @@ function page(title, body) {
   return `<header>
       <button class="pill" id="back" aria-label="Geri">‹</button>
       <h1>${title}</h1>
-      ${view === 'j' || view === 'b' ? '' : `<button class="pill" id="toggle">${editing ? 'Bitti' : 'Düzenle'}</button>`}
+      ${view === 'j' || view === 'b' || view === 'r' ? '' : `<button class="pill" id="toggle">${editing ? 'Bitti' : 'Düzenle'}</button>`}
     </header>${body}`;
 }
 
@@ -459,6 +563,8 @@ function render() {
       ${specialDays()}
       <h2 class="sec">BUBBLE 🐶</h2>
       <div class="notes" style="margin:10px 0 28px">${BUBBLE.map(([k, n]) => `<div class="note"><small>${n}</small>${bubbleLabel(k)}</div>`).join('')}</div>
+      <h2 class="sec">DÖNGÜ 🌸</h2><br>
+      ${cycleBody(true)}
       ${dailyCats().map(c => list(c, `${esc(c.emoji || '')} ${esc(c.name)}`)).join('')}
       ${weekCats().map(c => list(c, c.name + (c.day === today() ? ' · Bugün' : ''))).join('')}
       <h2 class="sec">GÜNLÜĞÜ</h2>
@@ -530,6 +636,10 @@ function render() {
     app.innerHTML = page('Birlikte 🧡', `<p class="sub">Birlikte yapmak istediklerimiz</p>${sharedBox()}`);
     return;
   }
+  if (view === 'r') {
+    app.innerHTML = page('Döngüm 🌸', cycleBody(false));
+    return;
+  }
   if (view === 'j') {
     const n = data.notes.find(x => x.id === noteId);
     app.innerHTML = page('Günlüğüm 📖', `
@@ -564,6 +674,7 @@ function render() {
       ${catBtn('w', '📅', 'Haftalık Görevler', leftLabel(left(weekCats())))}
       ${catBtn('j', '📖', 'Günlüğüm', data.notes.length + ' not')}
       ${catBtn('b', '🧡', 'Birlikte Yapılacaklar', sharedLeft() ? sharedLeft() + ' hayal bekliyor' : 'Bir şey ekle')}
+      ${catBtn('r', '🌸', 'Döngüm', cycLabel())}
     </div>
     <h2 class="sec" style="margin-top:28px">BUBBLE 🐶</h2>
     <div class="tasks quick">${BUBBLE.map(([k, n]) => `<button class="task" data-bubble="${k}">${n} · ${bubbleLabel(k)}</button>`).join('')}</div>
@@ -612,7 +723,23 @@ document.addEventListener('click', e => {
       .then(() => alert('Şifre kaydedildi. Kullanıcı adın: ' + (lite ? 'anil' : 'admin')))
       .catch(() => alert('Şifre değiştirilemedi. Çıkış yapıp yeniden gir, sonra tekrar dene.'));
   }
-  else if (el.dataset.view) { view = el.dataset.view; render(); scrollTo(0, 0); }
+  else if (el.dataset.view) { view = el.dataset.view; cyc = { sel: ymd(new Date()), m: ymd(new Date()).slice(0, 7) }; render(); scrollTo(0, 0); }
+  else if (el.dataset.cday) { if (!viewer && el.dataset.cday <= ymd(new Date())) { cyc.sel = el.dataset.cday; render(); } }
+  else if (el.dataset.cm) { const [y, m] = cyc.m.split('-').map(Number); cyc.m = ymd(new Date(y, m - 1 + +el.dataset.cm, 1)).slice(0, 7); render(); }
+  else if (el.id === 'cStart') { cy().periods.push({ s: cyc.sel }); cy().periods.sort((a, b) => a.s.localeCompare(b.s)); save(); render(); }
+  else if (el.id === 'cEnd') { openP(cyc.sel).e = cyc.sel; save(); render(); }
+  else if (el.dataset.ctag) {
+    const [k, v] = el.dataset.ctag.split(':'), L = cy().log, l = L[cyc.sel] || {};
+    if (k === 'f') l.f = l.f === v ? undefined : v;
+    else l[k] = (l[k] || []).includes(v) ? l[k].filter(x => x !== v) : [...(l[k] || []), v];
+    for (const x of Object.keys(l)) if (!l[x]?.length) delete l[x];
+    if (Object.keys(l).length) L[cyc.sel] = l; else delete L[cyc.sel];
+    save(); render();
+  }
+  else if (el.dataset.cdel) {
+    if (!confirm(`${short(el.dataset.cdel)} başlayan regl kaydı silinsin mi?`)) return;
+    cy().periods = cy().periods.filter(p => p.s !== el.dataset.cdel); save(); render();
+  }
   else if (el.id === 'back') { view = null; editing = false; noteId = null; render(); }
   else if (el.id === 'toggle') { editing = !editing; render(); }
   else if (el.id === 'closeWelcome') { welcome = false; data.seen = ymd(new Date()); save(); render(); }
@@ -725,6 +852,11 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden || $('dlg').open || view === 'j') return;
   if (data.seen !== ymd(new Date())) { welcome = true; flow = null; }
   render();
+});
+
+document.addEventListener('change', e => {
+  const v = e.target.id === 'cDate' && e.target.value;
+  if (v && v <= ymd(new Date())) { cyc.sel = v; cyc.m = v.slice(0, 7); render(); }
 });
 
 document.addEventListener('submit', e => {
