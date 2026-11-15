@@ -601,21 +601,44 @@ function sharedBox() {
   </div>${shared.some(x => x.done) ? '<button class="edit-cat" id="clearShared">Yapılanları listeden kaldır</button>' : ''}`;
 }
 // Liste ikimizin; aynı anda yazılırsa biri diğerini ezmesin diye işlem (transaction) ile değişir.
-async function sharedOp(fn) {
-  if (demo) { shared = fn(shared); return render(); }
-  try { await db.runTransaction(async tx => { const d = await tx.get(SHARED()); tx.set(SHARED(), { items: fn(d.exists ? d.data().items : []) }); }); }
-  catch { alert('Kaydedilemedi, internet bağlantını kontrol et.'); }
+// Sinem'den Anıl'a notlar: ortak/notlar; Sinem yazar, Anıl'ın iki hesabı açınca "Gördü" işaretler.
+const NOTES = () => db.collection('ortak').doc('notlar');
+let notes = [], unsubNotes = null;
+async function sharedOp(fn, ref = SHARED, quiet) {
+  if (demo) { if (ref === SHARED) shared = fn(shared); else notes = fn(notes); render(); return true; }
+  try { await db.runTransaction(async tx => { const d = await tx.get(ref()); tx.set(ref(), { items: fn(d.exists ? d.data().items : []) }); }); return true; }
+  catch { if (!quiet) alert('Kaydedilemedi, internet bağlantını kontrol et.'); return false; }
+}
+function markSeen() {
+  if (!(viewer || lite) || document.hidden || !notes.some(n => !n.seen)) return;
+  const now = new Date().toISOString();
+  sharedOp(items => items.map(n => n.seen ? n : { ...n, seen: now }), NOTES, true);
 }
 function watchShared() {
-  unsubShared?.(); unsubShared = null; shared = [];
+  unsubShared?.(); unsubNotes?.(); unsubShared = unsubNotes = null; shared = []; notes = [];
   if (demo || !user) return;
-  unsubShared = SHARED().onSnapshot(d => {
-    shared = d.exists ? d.data().items : [];
-    // Sinem'de yalnız ana ekran ve liste ekranı yeniden çizilir (görev animasyonu, taslak, açık pencere bozulmasın).
+  // Sinem'de yalnız ana ekran ve liste ekranı yeniden çizilir (görev animasyonu, taslak, açık pencere bozulmasın).
+  const redraw = () => {
     if ($('dlg').open || welcome || inbox || celebrate || flow || form) return;
     if (viewer || lite || view === null || view === 'b') render();
-  }, () => {});
+  };
+  unsubShared = SHARED().onSnapshot(d => { shared = d.exists ? d.data().items : []; redraw(); }, () => {});
+  unsubNotes = NOTES().onSnapshot(d => { notes = d.exists ? d.data().items : []; markSeen(); redraw(); }, () => {});
 }
+async function sendToAnil() {
+  const text = ($('sinemMsg')?.value || '').trim();
+  if (!text || sending) return;   // çift dokunuş iki not göndermesin
+  sending = true;
+  try {
+    if (!(await sharedOp(items => [...items, { id: uid(), text: text.slice(0, 1000), date: new Date().toISOString() }].slice(-30), NOTES))) return;
+    if ($('sinemMsg')) $('sinemMsg').value = '';
+    // Başlık header'da olmaz (Türkçe harf/emoji fetch'i patlatır), URL'de gider.
+    if (!demo) fetch(`${NTFY}?title=${encodeURIComponent("Sinem'den 💌")}`, { method: 'POST', body: text }).catch(() => {});
+    render();
+  } finally { sending = false; }
+}
+const notesFromSinem = () => `<h2 class="sec">SİNEM'DEN NOTLAR 💌</h2>
+  <div class="notes" style="margin:10px 0 28px">${[...notes].reverse().slice(0, 5).map(n => `<div class="note${n.seen ? '' : ' on'}"><small>${fmt(n.date)}</small>${esc(n.text)}</div>`).join('') || '<div class="empty">Henüz not yok</div>'}</div>`;
 const msgBox = draft => `<h2 class="sec">SİNEM'E MESAJ</h2>
       ${data.lastMood ? `<div class="note" style="margin-top:10px"><small>Son isteği · ${fmt(data.lastMood.date)}</small>${esc(data.lastMood.text)}</div>` : ''}
       <div class="quick">${QUICK.map(q => `<button class="task" data-quick="${q}">${q}</button>`).join('')}</div>
@@ -680,6 +703,7 @@ function render() {
   if (lite) {
     const draft = $('anilMsg')?.value || '';
     app.innerHTML = `<header><h1>Sinem 🌸</h1></header>
+      ${notesFromSinem()}
       <div class="grid big" style="margin:0 0 28px">${catBtn('p', '💰', 'Param', ownOk ? moneyLabel() : 'Yükleniyor…')}</div>
       <h2 class="sec">SENİ BUGÜN ${loveToday()} / 10 SEVİYOR</h2>
       ${loveRow('span')}
@@ -699,6 +723,7 @@ function render() {
     const all = todayCats().flatMap(c => c.tasks), draft = $('anilMsg')?.value || '';
     app.innerHTML = `<header><h1>Sinem'in Günü 🌸</h1></header>
       <p class="sub">Bugün ${all.filter(isDone).length} / ${all.length} görev tamam</p>
+      ${notesFromSinem()}
       <h2 class="sec">SENİ BUGÜN ${loveToday()} / 10 SEVİYOR</h2>
       ${loveRow('span')}
       ${loveWeek()}
@@ -807,6 +832,7 @@ function render() {
     return;
   }
   view = null;
+  const sdraft = $('sinemMsg')?.value || '';   // yeniden çizimde yazılan not kaybolmasın
   app.innerHTML = `<header><h1>Merhaba Sinem 🌸</h1></header>
     <a class="call" id="call" href="${data.phone ? 'tel:' + esc(data.phone) : '#'}">
       <span class="avatar"${photo() ? ` style="background-image:url(${photo()})"` : ''}>${photo() ? '' : 'A'}</span>
@@ -814,6 +840,10 @@ function render() {
       <span class="phone">📞</span>
     </a>
     ${data.msgs?.length ? `<button class="note" style="margin:-12px 0 28px;width:100%" data-star="${msgKey(data.msgs.at(-1))}"><small>💌 Anıl'dan · ${fmt(data.msgs.at(-1).date)}${data.msgs.at(-1).star ? ' · ⭐' : ' · ☆ anı yap'}</small>${esc(data.msgs.at(-1).text)}</button>` : ''}
+    <h2 class="sec">ANIL'A NOT 💌</h2>
+    <textarea id="sinemMsg" placeholder="Anıl'a bir not bırak…" style="min-height:80px;margin-top:10px">${esc(sdraft)}</textarea>
+    <div class="actions"><button class="ok" id="sendAnil">Gönder</button></div>
+    <div class="notes" style="margin:14px 0 28px">${notes.slice(-3).reverse().map(n => `<div class="note"><small>${n.seen ? 'Gördü ✓✓' : 'Ulaştı ✓'} · ${fmt(n.date)}</small>${esc(n.text)}</div>`).join('')}</div>
     <h2 class="sec">ANIL'I BUGÜN NE KADAR SEVİYORUM?</h2>
     ${loveRow('button')}
     <h2 class="sec">BUGÜN ${waterToday()} / ${WATER} BARDAK SU</h2>
@@ -941,6 +971,7 @@ document.addEventListener('click', e => {
   else if (el.id === 'clearShared') { if (confirm('Yapılanlar listeden kaldırılsın mı?')) sharedOp(items => items.filter(i => !i.done)); }
   else if (el.id === 'closeInbox') { const now = new Date().toISOString(); inbox.forEach(x => x.seen = now); inbox = null; save(); render(); }
   else if (el.dataset.quick) sendToSinem(el.dataset.quick);
+  else if (el.id === 'sendAnil') sendToAnil();
   else if (el.id === 'sendMsg') { const v = $('anilMsg').value.trim(); if (v) sendToSinem(v, true); }
   else if (el.dataset.bubble) {
     const [k, n] = BUBBLE.find(b => b[0] === el.dataset.bubble);
@@ -1118,6 +1149,7 @@ async function loadLite() {
   catch { alert("Sinem'in verisi alınamadı."); }
   try { const o = await remote().get({ source: 'server' }); own = (o.exists && JSON.parse(o.data().json).money) || emptyMoney(); ownOk = true; }
   catch { if (!ownOk) own = null; }   // yüklenemezse boş veriyle buluttakinin üstüne yazılmasın
+  markSeen();
   render();
 }
 
@@ -1125,6 +1157,7 @@ async function loadSinem() {
   try { data = JSON.parse((await db.collection('users').doc(SINEM_UID).get()).data().json); }
   catch { alert("Sinem'in verisi alınamadı."); return render(); }
   pushSummary();
+  markSeen();
   render();
 }
 
