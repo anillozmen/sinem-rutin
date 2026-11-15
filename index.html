@@ -7,7 +7,6 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Anıl'ım Halleder">
 <meta name="theme-color" content="#f6efe4">
-<link rel="manifest" href="manifest.json">
 <!-- iPhone simgeyi adresine göre önbelleğe alır; ilk deneme başarısız olduysa yeni ad gerekir. -->
 <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon-v2.png">
 <title>Anıl'ım Halleder</title>
@@ -167,8 +166,8 @@ const LITE = 'anil' + DOMAIN, LINK_KEY = new URLSearchParams(location.search).ge
 // ?a= yönetici hesabının tek kullanımlık ilk giriş anahtarı; Anıl girip "Şifre belirle" deyince geçersiz olur.
 const ADMIN_KEY = new URLSearchParams(location.search).get('a');
 let lite = false, linkTried = false;
-// iOS ana ekrana eklerken manifest varsa anahtarsız adresi kaydeder; anahtarlı bağlantıda manifest kaldırılır.
-if (LINK_KEY) document.querySelector('link[rel=manifest]')?.remove();
+// Manifest yok: iOS 17.4+ simgeyi manifest'ten almaya çalışıp Sinem'de harf gösteriyordu; apple-touch-icon ve
+// apple-mobile-web-app-capable yeterli. Ana ekrana eklerken o anki adres (anahtarlı bağlantı dahil) kaydedilir.
 const demo = new URLSearchParams(location.search).has('demo');  // girişsiz, örnek verili, buluta yazmayan mod
 firebase.initializeApp(FIREBASE);
 const auth = firebase.auth(), db = firebase.firestore();
