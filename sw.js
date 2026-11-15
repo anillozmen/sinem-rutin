@@ -1,6 +1,6 @@
-const C = 'rutin-v1';
+const C = 'rutin-v2';
 self.addEventListener('install', e => e.waitUntil(
-  caches.open(C).then(c => c.addAll(['./', 'index.html', 'manifest.json', 'icon.png'])).then(() => self.skipWaiting())
+  caches.open(C).then(c => c.addAll(['./', 'index.html', 'manifest.json', 'icon.png', 'apple-touch-icon-v2.png'])).then(() => self.skipWaiting())
 ));
 self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
 // Önce ağ (güncellemeler kendiliğinden gelsin), ağ yoksa önbellek.
