@@ -127,6 +127,12 @@ input{-webkit-user-select:text;user-select:text}
 .legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--muted);margin-bottom:26px}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px;vertical-align:-1px}
 .task.on{background:var(--pink);color:#fff}
+.wallet{background:#1e1a18;color:#fff;border-radius:28px;padding:20px 22px;margin-bottom:16px;display:flex;flex-direction:column;gap:4px;box-shadow:0 10px 28px #1e1a1840}
+.wallet b{font:600 34px ui-serif,'New York',Georgia,serif}
+.wallet small{color:#fffa;font-size:14px}
+.bar{background:linear-gradient(90deg,#ffd6e2 var(--w),var(--card) 0)}
+.lbl{display:block;color:var(--muted);font-size:13px;margin:0 0 6px}
+.mform .tasks{margin-bottom:16px}
 </style>
 </head>
 <body>
@@ -450,6 +456,142 @@ function cycleBody(ro) {
   return out;
 }
 
+// Para takibi: m = { acc: [{ id, name, t: 'n' nakit/banka | 'k' kart, bal, lim, kes }],
+//   tx: [{ id, d, a, k: 'g' gider | 'i' gelir | 'o' kart ödemesi, cat, acc, to, n: taksit, note, loan }], loans: [{ id, name, ta, top, od, gun, last }] }
+const CATS = ['🛒 Market', '🍽️ Yemek', '🚕 Ulaşım', '🧾 Faturalar', '🏠 Kira', '👗 Giyim', '💄 Bakım', '🐶 Bubble', '💊 Sağlık', '🎬 Eğlence', '🎁 Hediye', '🏦 Kredi', '📦 Diğer'];
+const INCOME = ['💼 Maaş', "💝 Anıl'dan", '📦 Diğer gelir'];
+const emptyMoney = () => ({ acc: [], tx: [], loans: [] });
+// shortcut: Anıl'ın sade ekrandaki parası telefonda saklanmaz, yalnız bulutta (users/<anil>); çevrimdışıyken kaydedilmez.
+let own = null, ownOk = false;
+const M = () => lite ? (own ||= emptyMoney()) : (data.money ||= emptyMoney());
+let form = null, pm = null;   // açık para formu, "nereye gitti" ayı
+const sum = a => a.reduce((x, y) => x + y, 0);
+const r2 = n => Math.round(n * 100) / 100;
+const tl = n => '₺' + r2(n).toLocaleString('tr-TR', { maximumFractionDigits: 2 });
+// "1.250,50", "1250.5", "1.250" → sayı; geçersizse 0.
+function parseTL(s) {
+  s = String(s ?? '').trim().replace(/[\s₺]/g, '');
+  s = s.includes(',') ? s.replace(/\./g, '').replace(',', '.') : /^\d{1,3}(\.\d{3})+$/.test(s) ? s.replace(/\./g, '') : s;
+  const n = r2(parseFloat(s));
+  return /^\d+(\.\d+)?$/.test(s) && n > 0 && n <= 1e8 ? n : 0;
+}
+const accBal = (m, a) => (a.bal || 0) + sum(m.tx.filter(t => t.acc === a.id).map(t => t.k === 'i' ? t.a : -t.a));
+// Kesim günü o ayda yoksa ayın son günü (31 → Şubat'ta 28/29).
+const kesimIn = (y, mo, K) => ymd(new Date(y, mo, Math.min(K, new Date(y, mo + 1, 0).getDate())));
+const kesimAt = (s, n, K) => { const d = new Date(s + 'T00:00'); return kesimIn(d.getFullYear(), d.getMonth() + n, K); };
+const firstKesim = (s, K) => kesimAt(s, 0, K) >= s ? kesimAt(s, 0, K) : kesimAt(s, 1, K);
+// Taksitli harcamada her kesimde bir taksit ekstreye girer.
+function posted(t, S, K) {
+  const n = t.n || 1, f = firstKesim(t.d, K);
+  let c = 0;
+  while (c < n && kesimAt(f, c, K) <= S) c++;
+  return t.a * c / n;
+}
+// BDDK (Ekim 2026): limit 100.000 TL ve altı %20, üstü %40 asgari. Son ödeme kesimden ~10 gün sonra. Faiz hesaba katılmaz.
+function card(m, a, now = ymd(new Date())) {
+  const g = m.tx.filter(t => t.k === 'g' && t.acc === a.id), pays = m.tx.filter(t => t.k === 'o' && t.to === a.id);
+  const paid = S => sum(pays.filter(t => t.d <= S).map(t => t.a));
+  const debt = sum(g.map(t => t.a)) - paid('9999');
+  const L = kesimAt(now, 0, a.kes) <= now ? kesimAt(now, 0, a.kes) : kesimAt(now, -1, a.kes), N = kesimAt(L, 1, a.kes);
+  const rate = a.lim > 100000 ? 0.4 : 0.2, stmt = S => Math.max(0, sum(g.map(t => posted(t, S, a.kes))) - paid(S));
+  const last = stmt(L), after = paid('9999') - paid(L), next = Math.max(0, sum(g.map(t => posted(t, N, a.kes))) - paid('9999'));
+  return { debt, free: a.lim - debt, L, N, rate, last, lastMin: last * rate, lastLeft: Math.max(0, last - after), minLeft: Math.max(0, last * rate - after),
+    due: addD(L, 10), next, nextMin: next * rate, nextDue: addD(N, 10) };
+}
+const loanNext = l => { const now = ymd(new Date()); return kesimAt(now, l.last === now.slice(0, 7) ? 1 : 0, l.gun); };
+const moneyLabel = () => { const m = M(), c = m.acc.filter(a => a.t === 'n'); return m.acc.length ? tl(sum(c.map(a => accBal(m, a)))) : 'Hesap ekle'; };
+function moneyForm(m) {
+  const f = form, cash = m.acc.filter(a => a.t === 'n');
+  const chip = (key, v, label = v) => `<button class="task${f[key] === v ? ' on' : ''}" data-ff="${key}" data-v="${esc(v)}">${esc(label)}</button>`;
+  const inp = (key, label, mode = 'decimal', ph = '') => `<label class="lbl" for="mf_${key}">${label}</label><input class="field" id="mf_${key}" data-f="${key}" inputmode="${mode}" placeholder="${ph}" value="${esc(String(f[key] ?? ''))}">`;
+  const btns = `<div class="actions">${f.id ? '<button class="del" id="mfDel">Sil</button>' : ''}<button id="mfCancel">Vazgeç</button><button class="ok" id="mfSave">Kaydet</button></div>`;
+  if (f.k === 'acc') return `<div class="mform"><p class="sub">${f.id ? 'Hesabı düzenle' : 'Yeni hesap'}</p>
+    ${inp('name', 'Ad', 'text', 'Ör. Cüzdan, Ziraat, Bonus Kart')}
+    <span class="lbl">Tür</span><div class="tasks">${chip('t', 'n', '💵 Nakit / banka')}${chip('t', 'k', '💳 Kredi kartı')}</div>
+    ${f.t === 'k' ? inp('lim', 'Kart limiti (₺)') + inp('kes', 'Hesap kesim günü (1-31)', 'numeric') : inp('bal', 'Şu anki bakiye (₺)')}${btns}</div>`;
+  if (f.k === 'loan') return `<div class="mform"><p class="sub">${f.id ? 'Krediyi düzenle' : 'Yeni kredi'}</p>
+    ${inp('name', 'Ad', 'text', 'Ör. İhtiyaç kredisi')}${inp('ta', 'Aylık taksit (₺)')}${inp('top', 'Toplam taksit sayısı', 'numeric')}
+    ${inp('od', 'Şimdiye kadar ödenen taksit', 'numeric')}${inp('gun', 'Ödeme günü (1-31)', 'numeric')}${btns}</div>`;
+  const accs = f.k === 'g' ? m.acc : cash, isCard = m.acc.find(a => a.id === f.acc)?.t === 'k';
+  return `<div class="mform"><p class="sub">${{ g: 'Harcama', i: 'Gelir', o: '💳 ' + esc(m.acc.find(a => a.id === f.to)?.name || '') + ' borcunu öde' }[f.k]}</p>
+    ${inp('a', 'Tutar (₺)', 'decimal', '0')}
+    ${f.k === 'o' ? '' : `<span class="lbl">Nereye</span><div class="tasks">${(f.k === 'g' ? CATS : INCOME).map(c => chip('cat', c)).join('')}</div>`}
+    <span class="lbl">${f.k === 'g' ? 'Nereden' : f.k === 'i' ? 'Hangi hesaba' : 'Hangi hesaptan'}</span>
+    <div class="tasks">${accs.map(a => chip('acc', a.id, (a.t === 'k' ? '💳 ' : '💵 ') + a.name)).join('') || '<span class="sub">Önce nakit/banka hesabı ekle</span>'}</div>
+    ${f.k === 'g' && isCard ? `<span class="lbl">Taksit</span><div class="tasks">${['1', '2', '3', '4', '6', '9', '12'].map(n => chip('n', n, n === '1' ? 'Tek çekim' : n + ' taksit')).join('')}</div>` : ''}
+    <label class="lbl" for="mf_d">Tarih</label><input type="date" class="field" id="mf_d" data-f="d" value="${f.d}" max="${ymd(new Date())}">
+    ${inp('note', 'Not (isteğe bağlı)', 'text')}${btns}</div>`;
+}
+function saveForm() {
+  const f = form, m = M(), now = ymd(new Date()), int = (v, lo, hi) => { const n = +v; return Number.isInteger(n) && n >= lo && n <= hi ? n : null; };
+  const name = (f.name || '').trim();
+  if (f.k === 'acc') {
+    if (!name) return alert('Hesaba bir ad ver.');
+    const b = String(f.bal ?? '').trim();
+    const x = f.t === 'k' ? { lim: parseTL(f.lim), kes: int(f.kes, 1, 31) } : { bal: b === '' || /^0+([.,]0+)?$/.test(b) ? 0 : parseTL(b) || null };
+    if (f.t === 'k' && (!x.lim || !x.kes)) return alert('Kart limiti ve 1-31 arası kesim günü gerekli.');
+    if (f.t !== 'k' && x.bal === null) return alert('Bakiyeyi sayı olarak yaz (ör. 1.250,50).');
+    const a = m.acc.find(a => a.id === f.id);
+    if (a) { if (a.t !== f.t && m.tx.some(t => t.acc === a.id || t.to === a.id)) return alert('İşlemi olan hesabın türü değişmez.'); Object.assign(a, { name, t: f.t }, x); }
+    else m.acc.push({ id: uid(), name, t: f.t, ...x });
+  } else if (f.k === 'loan') {
+    const x = { name, ta: parseTL(f.ta), top: int(f.top, 1, 600), od: int(f.od || 0, 0, 600), gun: int(f.gun, 1, 31) };
+    if (!name || !x.ta || !x.top || x.od === null || x.od > x.top || !x.gun) return alert('Ad, aylık taksit, taksit sayısı, ödenen taksit ve ödeme günü (1-31) doğru girilmeli.');
+    const l = m.loans.find(l => l.id === f.id);
+    if (l) Object.assign(l, x); else m.loans.push({ id: uid(), ...x });
+  } else {
+    const a = parseTL(f.a);
+    if (!a) return alert('Tutarı yaz (ör. 250 ya da 1.250,50).');
+    if (f.k !== 'o' && !f.cat) return alert('Nereye gittiğini seç.');
+    if (!m.acc.some(x => x.id === f.acc)) return alert('Hesap seç.');
+    if (!f.d || f.d > now) return alert('Tarih bugünden ileri olamaz.');
+    const t = { id: uid(), d: f.d, a, k: f.k, acc: f.acc };
+    if (f.k !== 'o') t.cat = f.cat; else t.to = f.to;
+    if (f.k === 'g' && m.acc.find(x => x.id === f.acc).t === 'k' && +f.n > 1) t.n = +f.n;
+    if ((f.note || '').trim()) t.note = f.note.trim().slice(0, 100);
+    const l = f.loan && m.loans.find(l => l.id === f.loan);
+    if (l) { t.loan = l.id; l.od = Math.min(l.top, l.od + 1); l.last = f.d.slice(0, 7); }
+    m.tx.push(t);
+  }
+  form = null; saveM(); render();
+}
+function saveM() {
+  if (!lite) return save();
+  if (!ownOk) return alert('Verin yüklenemedi; uygulamayı kapatıp aç, sonra tekrar dene.');
+  remote().set({ json: JSON.stringify({ money: own, updated: Date.now() }) }).catch(() => alert('Buluta kaydedilemedi.'));
+}
+// ro: yönetici ekranı, yalnız görür.
+function moneyBody(ro) {
+  const m = M();
+  if (form && !ro) return moneyForm(m);
+  const now = ymd(new Date()), mon = pm || now.slice(0, 7), cash = m.acc.filter(a => a.t === 'n'), cards = m.acc.filter(a => a.t === 'k').map(a => [a, card(m, a)]);
+  const monTx = m.tx.filter(t => t.d.slice(0, 7) === mon), by = {};
+  monTx.filter(t => t.k === 'g').forEach(t => by[t.cat] = (by[t.cat] || 0) + t.a);
+  const rows = Object.entries(by).sort((a, b) => b[1] - a[1]), max = rows[0]?.[1] || 1, accName = id => m.acc.find(a => a.id === id)?.name || '?';
+  const edit = (k, id) => ro ? '' : ` data-mf="${k}" data-id="${id}"`, tag = ro ? 'div' : 'button';
+  if (!m.acc.length && !m.loans.length) return ro ? '<div class="empty">Henüz hesap yok</div>'
+    : `<p class="sub">Önce hesaplarını ekle: cüzdan, banka, kredi kartı.</p><div class="tasks"><button class="task add" data-mf="acc">+ Hesap ekle</button><button class="task add" data-mf="loan">+ Kredi ekle</button></div>`;
+  return `<div class="wallet"><small>Toplam param</small><b>${tl(sum(cash.map(a => accBal(m, a))))}</b>${cards.length ? `<small>Kart borcu ${tl(sum(cards.map(([, c]) => c.debt)))}</small>` : ''}</div>
+    ${ro ? '' : `<div class="moods" style="margin-bottom:26px"><button class="mood" data-mf="g" style="background:#9a4862;min-height:84px"><b>➖ Harcama</b></button><button class="mood" data-mf="i" style="background:#3d6b4f;min-height:84px"><b>➕ Gelir</b></button></div>`}
+    <div class="month"><button class="pill" data-pm="-1" aria-label="Önceki ay">‹</button><h2 class="sec">${new Date(mon + '-01T00:00').toLocaleDateString('tr-TR', { month: 'long', year: 'numeric' }).toLocaleUpperCase('tr')} NEREYE GİTTİ</h2><button class="pill" data-pm="1" aria-label="Sonraki ay">›</button></div>
+    <p class="sub" style="font-size:18px">Harcama ${tl(sum(rows.map(r => r[1])))} · gelir ${tl(sum(monTx.filter(t => t.k === 'i').map(t => t.a)))}</p>
+    <div class="notes" style="margin:0 0 26px">${rows.map(([c, a]) => `<div class="note bar" style="--w:${a / max * 100}%"><small>${esc(c)}</small>${tl(a)}</div>`).join('') || '<div class="empty">Bu ay harcama yok</div>'}</div>
+    <h2 class="sec">HESAPLAR</h2><div class="notes" style="margin:10px 0 26px">
+      ${cash.map(a => `<${tag} class="note"${edit('acc', a.id)}><small>💵 ${esc(a.name)}</small>${tl(accBal(m, a))}</${tag}>`).join('')}
+      ${cards.map(([a, c]) => `<div class="note"><small>💳 ${esc(a.name)} · limit ${tl(a.lim)} · kesim her ayın ${a.kes}'i</small>Borç ${tl(c.debt)} · kullanılabilir ${tl(c.free)}
+        ${c.last ? `<br><small style="margin:8px 0 2px">Son ekstre · ${short(c.L)}</small>${tl(c.last)} · asgari ${tl(c.lastMin)}<br>${c.lastLeft ? `Kalan ${tl(c.lastLeft)}${c.minLeft ? ` · asgariden kalan ${tl(c.minLeft)}` : ' · asgari ödendi ✓'} · son ödeme ≈ ${short(c.due)}` : 'Ödendi ✓'}` : ''}
+        <br><small style="margin:8px 0 2px">Sonraki ekstre · ${short(c.N)} (tahmini)</small>${tl(c.next)} · asgari ≈ ${tl(c.nextMin)} (%${c.rate * 100}) · son ödeme ≈ ${short(c.nextDue)}
+        ${ro ? '' : `<div class="tasks" style="margin-top:10px"><button class="task" data-mf="o" data-to="${a.id}">Borç öde</button><button class="task" data-mf="acc" data-id="${a.id}">✏️ Düzenle</button></div>`}</div>`).join('')}
+      ${ro ? '' : '<button class="task add" data-mf="acc">+ Hesap ekle</button>'}</div>
+    ${m.loans.length || !ro ? `<h2 class="sec">KREDİLER</h2><div class="notes" style="margin:10px 0 26px">${m.loans.map(l => `<div class="note"><small>🏦 ${esc(l.name)} · ${l.od}/${l.top} taksit</small>
+      ${l.od >= l.top ? 'Bitti 🎉' : `Taksit ${tl(l.ta)} · kalan ${tl(l.ta * (l.top - l.od))}<br>${l.last === now.slice(0, 7) ? 'Bu ay ödendi ✓ · ' : ''}Sonraki ödeme ${short(loanNext(l))}`}
+      ${ro ? '' : `<div class="tasks" style="margin-top:10px">${l.od < l.top ? `<button class="task" data-mf="g" data-loan="${l.id}">Taksiti ödedim</button>` : ''}<button class="task" data-mf="loan" data-id="${l.id}">✏️ Düzenle</button></div>`}</div>`).join('')}
+      ${ro ? '' : '<button class="task add" data-mf="loan">+ Kredi ekle</button>'}</div>` : ''}
+    <h2 class="sec">SON İŞLEMLER${ro || !m.tx.length ? '' : ' · SİLMEK İÇİN DOKUN'}</h2><div class="notes" style="margin:10px 0 26px">
+      ${[...m.tx].sort((a, b) => b.d.localeCompare(a.d)).slice(0, 15).map(t => `<${tag} class="note"${ro ? '' : ` data-txdel="${t.id}"`}><small>${short(t.d)} · ${esc(accName(t.acc))}${t.k === 'o' ? ' → ' + esc(accName(t.to)) : ''}${t.n ? ` · ${t.n} taksit` : ''}</small>
+        ${t.k === 'i' ? '+' : '−'}${tl(t.a)} ${t.k === 'o' ? 'kart ödemesi' : esc(t.cat)}${t.note ? ' · ' + esc(t.note) : ''}</${tag}>`).join('') || '<div class="empty">Henüz işlem yok</div>'}</div>`;
+}
+
 const sharedLeft = () => shared.filter(x => !x.done).length;
 function sharedBox() {
   return `<div class="tasks">
@@ -470,7 +612,7 @@ function watchShared() {
   unsubShared = SHARED().onSnapshot(d => {
     shared = d.exists ? d.data().items : [];
     // Sinem'de yalnız ana ekran ve liste ekranı yeniden çizilir (görev animasyonu, taslak, açık pencere bozulmasın).
-    if ($('dlg').open || welcome || inbox || celebrate || flow) return;
+    if ($('dlg').open || welcome || inbox || celebrate || flow || form) return;
     if (viewer || lite || view === null || view === 'b') render();
   }, () => {});
 }
@@ -511,7 +653,7 @@ function page(title, body) {
   return `<header>
       <button class="pill" id="back" aria-label="Geri">‹</button>
       <h1>${title}</h1>
-      ${view === 'j' || view === 'b' || view === 'r' ? '' : `<button class="pill" id="toggle">${editing ? 'Bitti' : 'Düzenle'}</button>`}
+      ${view === 'j' || view === 'b' || view === 'r' || view === 'p' ? '' : `<button class="pill" id="toggle">${editing ? 'Bitti' : 'Düzenle'}</button>`}
     </header>${body}`;
 }
 
@@ -531,9 +673,14 @@ function render() {
     </form>`;
     return;
   }
+  if (view === 'p' && lite) {
+    app.innerHTML = page('Param 💰', moneyBody(false));
+    return;
+  }
   if (lite) {
     const draft = $('anilMsg')?.value || '';
     app.innerHTML = `<header><h1>Sinem 🌸</h1></header>
+      <div class="grid big" style="margin:0 0 28px">${catBtn('p', '💰', 'Param', ownOk ? moneyLabel() : 'Yükleniyor…')}</div>
       <h2 class="sec">SENİ BUGÜN ${loveToday()} / 10 SEVİYOR</h2>
       ${loveRow('span')}
       ${loveWeek()}
@@ -565,6 +712,8 @@ function render() {
       <div class="notes" style="margin:10px 0 28px">${BUBBLE.map(([k, n]) => `<div class="note"><small>${n}</small>${bubbleLabel(k)}</div>`).join('')}</div>
       <h2 class="sec">DÖNGÜ 🌸</h2><br>
       ${cycleBody(true)}
+      <h2 class="sec">PARA 💰</h2><br>
+      ${moneyBody(true)}
       ${dailyCats().map(c => list(c, `${esc(c.emoji || '')} ${esc(c.name)}`)).join('')}
       ${weekCats().map(c => list(c, c.name + (c.day === today() ? ' · Bugün' : ''))).join('')}
       <h2 class="sec">GÜNLÜĞÜ</h2>
@@ -640,6 +789,10 @@ function render() {
     app.innerHTML = page('Döngüm 🌸', cycleBody(false));
     return;
   }
+  if (view === 'p') {
+    app.innerHTML = page('Param 💰', moneyBody(false));
+    return;
+  }
   if (view === 'j') {
     const n = data.notes.find(x => x.id === noteId);
     app.innerHTML = page('Günlüğüm 📖', `
@@ -675,6 +828,7 @@ function render() {
       ${catBtn('j', '📖', 'Günlüğüm', data.notes.length + ' not')}
       ${catBtn('b', '🧡', 'Birlikte Yapılacaklar', sharedLeft() ? sharedLeft() + ' hayal bekliyor' : 'Bir şey ekle')}
       ${catBtn('r', '🌸', 'Döngüm', cycLabel())}
+      ${catBtn('p', '💰', 'Param', moneyLabel())}
     </div>
     <h2 class="sec" style="margin-top:28px">BUBBLE 🐶</h2>
     <div class="tasks quick">${BUBBLE.map(([k, n]) => `<button class="task" data-bubble="${k}">${n} · ${bubbleLabel(k)}</button>`).join('')}</div>
@@ -723,7 +877,41 @@ document.addEventListener('click', e => {
       .then(() => alert('Şifre kaydedildi. Kullanıcı adın: ' + (lite ? 'anil' : 'admin')))
       .catch(() => alert('Şifre değiştirilemedi. Çıkış yapıp yeniden gir, sonra tekrar dene.'));
   }
-  else if (el.dataset.view) { view = el.dataset.view; cyc = { sel: ymd(new Date()), m: ymd(new Date()).slice(0, 7) }; render(); scrollTo(0, 0); }
+  else if (el.dataset.mf) {
+    const m = M(), k = el.dataset.mf, id = el.dataset.id, cash = m.acc.find(a => a.t === 'n')?.id;
+    const a = k === 'acc' && m.acc.find(a => a.id === id), l = k === 'loan' && m.loans.find(l => l.id === id), lp = m.loans.find(l => l.id === el.dataset.loan);
+    const to = el.dataset.to && m.acc.find(a => a.id === el.dataset.to), c = to && card(m, to);
+    form = a ? { k, id, name: a.name, t: a.t, bal: a.bal, lim: a.lim, kes: a.kes }
+      : l ? { k, id, name: l.name, ta: l.ta, top: l.top, od: l.od, gun: l.gun }
+      : k === 'acc' ? { k, t: 'n' } : k === 'loan' ? { k, od: 0 }
+      : { k, d: ymd(new Date()), acc: k === 'g' && !lp ? m.acc[0]?.id : cash, n: '1',
+          ...(lp ? { a: lp.ta, cat: '🏦 Kredi', loan: lp.id } : {}), ...(to ? { to: to.id, a: r2(c.lastLeft || c.debt) || '' } : {}) };
+    render(); scrollTo(0, 0);
+  }
+  else if (el.dataset.ff) { form[el.dataset.ff] = el.dataset.v; render(); }
+  else if (el.id === 'mfCancel') { form = null; render(); }
+  else if (el.id === 'mfSave') saveForm();
+  else if (el.id === 'mfDel') {
+    const m = M();
+    if (form.k === 'acc') {
+      if (m.tx.some(t => t.acc === form.id || t.to === form.id)) return alert('Bu hesabın işlemleri var; önce onları sil.');
+      if (!confirm('Hesap silinsin mi?')) return;
+      m.acc = m.acc.filter(a => a.id !== form.id);
+    } else {
+      if (!confirm('Kredi silinsin mi?')) return;
+      m.loans = m.loans.filter(l => l.id !== form.id);
+    }
+    form = null; saveM(); render();
+  }
+  else if (el.dataset.pm) { const [y, mo] = (pm || ymd(new Date()).slice(0, 7)).split('-').map(Number); pm = ymd(new Date(y, mo - 1 + +el.dataset.pm, 1)).slice(0, 7); render(); }
+  else if (el.dataset.txdel) {
+    const m = M(), t = m.tx.find(t => t.id === el.dataset.txdel);
+    if (!t || !confirm(`${short(t.d)} · ${tl(t.a)} işlemi silinsin mi?`)) return;
+    const l = t.loan && m.loans.find(l => l.id === t.loan);
+    if (l) l.od = Math.max(0, l.od - 1);   // taksit ödemesi silinince sayaç geri alınır
+    m.tx = m.tx.filter(x => x !== t); saveM(); render();
+  }
+  else if (el.dataset.view) { view = el.dataset.view; form = null; pm = null; cyc ={ sel: ymd(new Date()), m: ymd(new Date()).slice(0, 7) }; render(); scrollTo(0, 0); }
   else if (el.dataset.cday) { if (!viewer && el.dataset.cday <= ymd(new Date())) { cyc.sel = el.dataset.cday; render(); } }
   else if (el.dataset.cm) { const [y, m] = cyc.m.split('-').map(Number); cyc.m = ymd(new Date(y, m - 1 + +el.dataset.cm, 1)).slice(0, 7); render(); }
   else if (el.id === 'cStart') { cy().periods.push({ s: cyc.sel }); cy().periods.sort((a, b) => a.s.localeCompare(b.s)); save(); render(); }
@@ -740,7 +928,7 @@ document.addEventListener('click', e => {
     if (!confirm(`${short(el.dataset.cdel)} başlayan regl kaydı silinsin mi?`)) return;
     cy().periods = cy().periods.filter(p => p.s !== el.dataset.cdel); save(); render();
   }
-  else if (el.id === 'back') { view = null; editing = false; noteId = null; render(); }
+  else if (el.id === 'back') { view = null; editing = false; noteId = null; form = null; render(); }
   else if (el.id === 'toggle') { editing = !editing; render(); }
   else if (el.id === 'closeWelcome') { welcome = false; data.seen = ymd(new Date()); save(); render(); }
   else if (el.id === 'closeYay') { celebrate = false; render(); }
@@ -854,6 +1042,9 @@ document.addEventListener('visibilitychange', () => {
   render();
 });
 
+// Para formuna yazılanlar durumda tutulur; ekran yeniden çizilince silinmez.
+document.addEventListener('input', e => { if (form && e.target.dataset.f) form[e.target.dataset.f] = e.target.value; });
+
 document.addEventListener('change', e => {
   const v = e.target.id === 'cDate' && e.target.value;
   if (v && v <= ymd(new Date())) { cyc.sel = v; cyc.m = v.slice(0, 7); render(); }
@@ -925,6 +1116,8 @@ async function checkMsgs() {
 async function loadLite() {
   try { const d = await SUMMARY().get(); data = { ...SEED, ...(d.exists ? JSON.parse(d.data().json) : {}) }; }
   catch { alert("Sinem'in verisi alınamadı."); }
+  try { const o = await remote().get({ source: 'server' }); own = (o.exists && JSON.parse(o.data().json).money) || emptyMoney(); ownOk = true; }
+  catch { if (!ownOk) own = null; }   // yüklenemezse boş veriyle buluttakinin üstüne yazılmasın
   render();
 }
 
@@ -947,7 +1140,7 @@ if (demo) {
 auth.onAuthStateChanged(async u => {
   if (demo) return;
   user = u; loaded = false; inbox = null;
-  view = null; editing = false; flow = null;
+  view = null; editing = false; flow = null; form = null; own = null; ownOk = false;
   viewer = u?.email === VIEWER; lite = u?.email === LITE;
   watchShared();
   if (!u && !linkTried && (LINK_KEY || ADMIN_KEY)) {
