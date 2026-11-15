@@ -863,7 +863,8 @@ function render() {
     <h2 class="sec" style="margin-top:28px">BUBBLE 🐶</h2>
     <div class="tasks quick">${BUBBLE.map(([k, n]) => `<button class="task" data-bubble="${k}">${n} · ${bubbleLabel(k)}</button>`).join('')}</div>
     <div style="margin-top:28px">${specialDays()}</div>
-    <button class="edit-cat" id="logout">Çıkış yap</button>`;
+    <button class="edit-cat" id="setPass">Şifremi değiştir</button>
+    <button class="edit-cat" id="logout" style="margin-top:0">Çıkış yap</button>`;
 }
 
 function ask({ title, name = '', emoji, sec, canDelete }, done) {
@@ -903,8 +904,9 @@ document.addEventListener('click', e => {
     const p = prompt('Yeni şifre (en az 6 karakter):');
     if (!p) return;
     if (p.length < 6) return alert('Şifre en az 6 karakter olmalı.');
+    if (prompt('Yeni şifreyi tekrar yaz:') !== p) return alert('Şifreler aynı değil, değiştirilmedi.');   // yanlış yazılıp unutulmasın
     auth.currentUser.updatePassword(p)
-      .then(() => alert('Şifre kaydedildi. Kullanıcı adın: ' + (lite ? 'anil' : 'admin')))
+      .then(() => alert('Şifre kaydedildi. Kullanıcı adın: ' + auth.currentUser.email.split('@')[0]))
       .catch(() => alert('Şifre değiştirilemedi. Çıkış yapıp yeniden gir, sonra tekrar dene.'));
   }
   else if (el.dataset.mf) {
